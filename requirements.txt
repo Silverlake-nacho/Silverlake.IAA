@@ -1,7 +1,7 @@
 Flask
 pandas
 xlsxwriter
-gunicorn
+gunicorn==23.0.0
 gspread
 oauth2client
 google-api-python-client
