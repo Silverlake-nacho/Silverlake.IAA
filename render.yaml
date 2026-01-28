@@ -2,8 +2,8 @@ services:
   - type: web
     name: part-sales-opportunity
     env: python
-    buildCommand: pip install -r /opt/render/project/src/requirements.txt
-    startCommand: /opt/render/project/src/.venv/bin/gunicorn app:app
+    buildCommand: /opt/render/project/src/render-build.sh
+    startCommand: /opt/render/project/src/render-start.sh
     plan: free
     envVars:
       - key: PORT
@@ -12,8 +12,8 @@ services:
     name: vehicle-stats
     env: python
     rootDir: vehicle_stats_app
-    buildCommand: pip install -r /opt/render/project/src/requirements.txt
-    startCommand: /opt/render/project/src/.venv/bin/gunicorn app:app
+    buildCommand: /opt/render/project/src/render-build.sh
+    startCommand: /opt/render/project/src/render-start.sh
     plan: free
     envVars:
       - key: PORT
