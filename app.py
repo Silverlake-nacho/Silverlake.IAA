@@ -18,7 +18,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATS_EXCLUSIONS_PATH = os.path.join(BASE_DIR, "stats_exclusions.json")
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "vehicle-stats-secret")
+app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
 USERS = {
     "admin": "Silverlake1!",
@@ -33,12 +33,12 @@ USERS = {
     "nacho": "Silverlake1!",
 }
 
-ATLAS_DB_HOST = os.getenv("ATLAS_DB_HOST", "52.51.93.215")
+ATLAS_DB_HOST = os.environ["ATLAS_DB_HOST"]
 ATLAS_DB_PORT = int(os.getenv("ATLAS_DB_PORT", "1433"))
 ATLAS_DB_NAME = os.getenv("ATLAS_DB_NAME", "silverlake")
 ATLAS_DB_NAMES = os.getenv("ATLAS_DB_NAMES", "")
-ATLAS_DB_USER = os.getenv("ATLAS_DB_USER", "nacho")
-ATLAS_DB_PASSWORD = os.getenv("ATLAS_DB_PASSWORD", "Merry3258")
+ATLAS_DB_USER = os.environ["ATLAS_DB_USER"]
+ATLAS_DB_PASSWORD = os.environ["ATLAS_DB_PASSWORD"]
 ATLAS_DB_DRIVER = os.getenv("ATLAS_DB_DRIVER", "ODBC Driver 18 for SQL Server")
 ATLAS_DB_ENCRYPT = os.getenv("ATLAS_DB_ENCRYPT", "yes")
 ATLAS_DB_TRUST_CERT = os.getenv("ATLAS_DB_TRUST_CERT", "yes")
