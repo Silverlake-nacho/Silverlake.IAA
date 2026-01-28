@@ -2,6 +2,9 @@ services:
   - type: web
     name: vehicle-stats
     env: python
+    pythonVersion: 3.12.4
+    aptPackages:
+      - unixodbc-dev
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m gunicorn app:app
     plan: free
