@@ -11,7 +11,7 @@ services:
   - type: web
     name: Silverlake.IAA
     env: python
-    rootDir: vehicle_stats_app
+    rootDir: Silverlake.IAA
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m gunicorn app:app
     plan: free
