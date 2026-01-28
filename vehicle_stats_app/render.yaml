@@ -5,8 +5,8 @@ services:
     pythonVersion: 3.12.4
     aptPackages:
       - unixodbc-dev
-    buildCommand: pip install -r /opt/render/project/src/requirements.txt
-    startCommand: /opt/render/project/src/.venv/bin/gunicorn app:app
+    buildCommand: /opt/render/project/src/render-build.sh
+    startCommand: /opt/render/project/src/render-start.sh
     plan: free
     envVars:
       - key: PORT
