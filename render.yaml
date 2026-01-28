@@ -1,7 +1,17 @@
 services:
   - type: web
-    name: Silverlake.IAA
+    name: part-sales-opportunity
     env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 -m gunicorn app:app
+    plan: free
+    envVars:
+      - key: PORT
+        value: 10000
+  - type: web
+    name: vehicle-stats
+    env: python
+    rootDir: vehicle_stats_app
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m gunicorn app:app
     plan: free
