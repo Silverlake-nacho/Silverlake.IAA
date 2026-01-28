@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: vehicle-stats
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 -m gunicorn app:app
+    plan: free
+    envVars:
+      - key: PORT
+        value: 10000
