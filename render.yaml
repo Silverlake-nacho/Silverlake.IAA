@@ -3,7 +3,7 @@ services:
     name: part-sales-opportunity
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: /opt/render/project/src/.venv/bin/gunicorn app:app
     plan: free
     envVars:
       - key: PORT
@@ -13,7 +13,7 @@ services:
     env: python
     rootDir: vehicle_stats_app
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: /opt/render/project/src/.venv/bin/gunicorn app:app
     plan: free
     envVars:
       - key: PORT
