@@ -1,4 +1,4 @@
-ñservices:
+services:
   - type: web
     name: part-sales-opportunity
     env: python
