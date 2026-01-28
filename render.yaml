@@ -1,3 +1,26 @@
-git add render.yaml
-git commit -m "Add render.yaml"
-git push
+services:
+  - type: web
+    name: part-sales-opportunity
+    env: python
+    pythonVersion: 3.12.4
+    aptPackages:
+      - unixodbc-dev
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 -m gunicorn app:app
+    plan: free
+    envVars:
+      - key: PORT
+        value: 10000
+  - type: web
+    name: vehicle-stats
+    env: python
+    rootDir: vehicle_stats_app
+    pythonVersion: 3.12.4
+    aptPackages:
+      - unixodbc-dev
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 -m gunicorn app:app
+    plan: free
+    envVars:
+      - key: PORT
+        value: 10000
