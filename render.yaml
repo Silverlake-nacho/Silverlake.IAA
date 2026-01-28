@@ -9,9 +9,9 @@ services:
       - key: PORT
         value: 10000
   - type: web
-    name: Silverlake.IAA
+    name: vehicle-stats
     env: python
-    rootDir: Silverlake.IAA
+    rootDir: vehicle_stats_app
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m gunicorn app:app
     plan: free
