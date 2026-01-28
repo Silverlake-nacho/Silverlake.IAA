@@ -1,3 +1,11 @@
-Flask==3.0.3
-gunicorn==23.0.0
-pyodbc==5.1.0
+Flask
+pandas
+xlsxwriter
+gunicorn
+gspread
+oauth2client
+google-api-python-client
+google-auth
+google-auth-oauthlib
+beautifulsoup4
+pyodbc
