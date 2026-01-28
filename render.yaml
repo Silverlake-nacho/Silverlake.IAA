@@ -2,9 +2,6 @@ services:
   - type: web
     name: part-sales-opportunity
     env: python
-    pythonVersion: 3.12.4
-    aptPackages:
-      - unixodbc-dev
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m gunicorn app:app
     plan: free
@@ -15,9 +12,6 @@ services:
     name: vehicle-stats
     env: python
     rootDir: vehicle_stats_app
-    pythonVersion: 3.12.4
-    aptPackages:
-      - unixodbc-dev
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m gunicorn app:app
     plan: free
