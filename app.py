@@ -500,7 +500,9 @@ def vehicle_stats():
             "entity_label": entity_label,
             "chart_title_base": f"Vehicles by {entity_label}",
         }
-        error_message = f"Unable to load vehicle stats: {exc}"
+
+    if last_error is not None:
+        error_message = f"Unable to load vehicle stats: {last_error}"
 
     return render_template(
         "vehicle_stats.html",
