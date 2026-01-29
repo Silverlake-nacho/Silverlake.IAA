@@ -8,6 +8,7 @@ from flask import (
     url_for,
 )
 from datetime import date, datetime, timedelta
+import time
 from typing import List, Optional, Tuple
 import json
 import os
@@ -554,6 +555,25 @@ def vehicle_stats_data():
             ),
         }
     )
+
+
+@app.route("/db_check", methods=["GET"])
+def db_check():
+    start_ts = time.time()
+    try:
+        database_name, _ = fetch_atlas_vehicle_counts_by_insurance(date.today(), date.today())
+        conn = get_atlas_db_connection(database_name)
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        conn.close()
+        elapsed_ms = int((time.time() - start_ts) * 1000)
+        return jsonify({"status": "ok", "database": database_name, "elapsed_ms": elapsed_ms})
+    except Exception as exc:
+        elapsed_ms = int((time.time() - start_ts) * 1000)
+        return jsonify({"status": "error", "error": str(exc), "elapsed_ms": elapsed_ms}), 500
+
 
 
 @app.route("/vehicle_stats/exclusions", methods=["POST"])
