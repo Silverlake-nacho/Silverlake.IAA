@@ -93,6 +93,15 @@ def _get_atlas_db_name_candidates() -> List[str]:
 
 
 def get_atlas_db_connection(database_name: str):
+    available_drivers = [driver.strip() for driver in pyodbc.drivers()]
+    if ATLAS_DB_DRIVER not in available_drivers:
+        available_list = ", ".join(available_drivers) or "None found"
+        raise RuntimeError(
+            "ODBC driver not available. "
+            f"Requested '{ATLAS_DB_DRIVER}'. "
+            f"Available drivers: {available_list}. "
+            "Install the SQL Server ODBC driver or set ATLAS_DB_DRIVER to a valid name."
+        )
     conn_str = (
         f"DRIVER={{{ATLAS_DB_DRIVER}}};"
         f"SERVER={ATLAS_DB_HOST},{ATLAS_DB_PORT};"
