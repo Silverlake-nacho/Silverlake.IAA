@@ -426,7 +426,7 @@ def logout():
 
 @app.before_request
 def require_login():
-    allowed_routes = {"login", "static"}
+    allowed_routes = {"login", "static", "db_check"}
     if request.endpoint not in allowed_routes and not session.get("logged_in"):
         next_url = request.url
         return redirect(url_for("login", next=next_url))
