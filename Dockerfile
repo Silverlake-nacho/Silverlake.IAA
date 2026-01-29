@@ -8,6 +8,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         gnupg \
+        netcat-openbsd \
         unixodbc-dev \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
