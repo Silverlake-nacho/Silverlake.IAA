@@ -28,4 +28,4 @@ COPY . .
 
 EXPOSE 10000
 
-CMD ["gunicorn", "app:app"]
+CMD ["gunicorn", "--workers", "1", "--timeout", "180", "--max-requests", "200", "--max-requests-jitter", "50", "app:app"]
