@@ -192,13 +192,15 @@ def fetch_atlas_vehicle_counts_by_contract_group(start_date: date, end_date: dat
 
 
 def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date):
+    detail_limit = max(1, min(ATLAS_DETAIL_LIMIT, 5000))
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
-            query = """
+            query = f"""
                 SELECT
+                    TOP ({detail_limit})
                     v.Id,
                     v.RegNo AS Registration,
                     CAST(v.DateEntered AS datetime2) AS DateEntered,
@@ -451,13 +453,34 @@ def vehicle_stats():
     live_enabled = str(request.args.get("live", "")).lower() in {"1", "true", "yes", "on"}
 
     error_message = None
-    try:
-        context = build_vehicle_stats_context(
-            filter_type, start_date_str, end_date_str, excluded_args, group_mode
-        )
-    except Exception as exc:
-        start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
-        entity_label = "Contract Group" if group_mode == "contract" else "Insurance Company"
+    start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
+    entity_label = "Contract Group" if group_mode == "contract" else "Insurance Company"
+    if live_enabled:
+        try:
+            context = build_vehicle_stats_context(
+                filter_type, start_date_str, end_date_str, excluded_args, group_mode
+            )
+        except Exception as exc:
+            context = {
+                "filter_type": filter_type,
+                "start_date": start_date,
+                "end_date": end_date,
+                "date_range_label": describe_date_range(filter_type, start_date, end_date),
+                "rows": [],
+                "sum_total": 0,
+                "chart_labels": [],
+                "chart_values": [],
+                "all_companies": [],
+                "excluded_companies": excluded_args,
+                "database_name": None,
+                "detail_columns": [],
+                "detail_rows": [],
+                "group_mode": group_mode,
+                "entity_label": entity_label,
+                "chart_title_base": f"Vehicles by {entity_label}",
+            }
+            error_message = f"Unable to load vehicle stats: {exc}"
+    else:
         context = {
             "filter_type": filter_type,
             "start_date": start_date,
