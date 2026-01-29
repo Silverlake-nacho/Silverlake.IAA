@@ -42,7 +42,7 @@ ATLAS_DB_PASSWORD = os.environ["ATLAS_DB_PASSWORD"]
 ATLAS_DB_DRIVER = os.getenv("ATLAS_DB_DRIVER", "ODBC Driver 18 for SQL Server")
 ATLAS_DB_ENCRYPT = os.getenv("ATLAS_DB_ENCRYPT", "yes")
 ATLAS_DB_TRUST_CERT = os.getenv("ATLAS_DB_TRUST_CERT", "yes")
-
+ATLAS_DETAIL_LIMIT = int(os.getenv("ATLAS_DETAIL_LIMIT", "500"))
 
 def _load_json_file(path: str, fallback):
     if not os.path.exists(path):
