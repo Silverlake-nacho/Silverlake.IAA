@@ -453,6 +453,7 @@ def vehicle_stats():
     live_enabled = str(request.args.get("live", "")).lower() in {"1", "true", "yes", "on"}
 
     error_message = None
+    last_error = None
     start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
     entity_label = "Contract Group" if group_mode == "contract" else "Insurance Company"
     if live_enabled:
@@ -461,6 +462,7 @@ def vehicle_stats():
                 filter_type, start_date_str, end_date_str, excluded_args, group_mode
             )
         except Exception as exc:
+            last_error = exc
             context = {
                 "filter_type": filter_type,
                 "start_date": start_date,
@@ -479,7 +481,6 @@ def vehicle_stats():
                 "entity_label": entity_label,
                 "chart_title_base": f"Vehicles by {entity_label}",
             }
-            error_message = f"Unable to load vehicle stats: {exc}"
     else:
         context = {
             "filter_type": filter_type,
