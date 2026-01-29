@@ -139,8 +139,8 @@ def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date):
             cur = conn.cursor()
             query = """
                 SELECT
-                    ic.Name,
-                    COUNT(*) AS VehicleCount
+                    ic.Name
+                    
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
                 INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
