@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: part-sales-opportunity
+    name: vehicle_stats_app
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
