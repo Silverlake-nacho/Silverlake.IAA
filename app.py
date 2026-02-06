@@ -13,6 +13,7 @@ from typing import List, Optional, Tuple
 import os
 import pyodbc
 
+
 app = Flask(__name__)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
@@ -40,7 +41,6 @@ ATLAS_DB_ENCRYPT = os.getenv("ATLAS_DB_ENCRYPT", "yes")
 ATLAS_DB_TRUST_CERT = os.getenv("ATLAS_DB_TRUST_CERT", "yes")
 ATLAS_DETAIL_LIMIT = int(os.getenv("ATLAS_DETAIL_LIMIT", "500"))
 IAA_INSURANCE_COMPANY_NAME = os.getenv("IAA_INSURANCE_COMPANY_NAME", "IAA")
-
 
 def _get_atlas_db_name_candidates() -> List[str]:
     explicit_names = [name.strip() for name in ATLAS_DB_NAMES.split(",") if name.strip()]
@@ -301,7 +301,6 @@ def build_vehicle_stats_context(
     details_db_name, detail_columns, detail_rows = fetch_atlas_vehicle_details_by_insurance(
         start_date, end_date
     )
-    
     if resolved_group_mode == "branch":
         filtered_rows = [(row[0], int(row[1])) for row in rows]
         entity_label = "Insurance Branch"
@@ -394,30 +393,12 @@ def vehicle_stats():
     last_error = None
     start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
     entity_label = "Insurance Branch" if group_mode in {"branch", "contract"} else "Insurance Company"
-    if live_enabled:
-        try:
-            context = build_vehicle_stats_context(
-                filter_type, start_date_str, end_date_str, group_mode
-            )
-        except Exception as exc:
-            last_error = exc
-            context = {
-                "filter_type": filter_type,
-                "start_date": start_date,
-                "end_date": end_date,
-                "date_range_label": describe_date_range(filter_type, start_date, end_date),
-                "rows": [],
-                "sum_total": 0,
-                "chart_labels": [],
-                "chart_values": [],
-                "database_name": None,
-                "detail_columns": [],
-                "detail_rows": [],
-                "group_mode": group_mode,
-                "entity_label": entity_label,
-                "chart_title_base": f"Vehicles by {entity_label}",
-            }
-    else:
+    try:
+        context = build_vehicle_stats_context(
+            filter_type, start_date_str, end_date_str, group_mode
+        )
+    except Exception as exc:
+        last_error = exc
         context = {
             "filter_type": filter_type,
             "start_date": start_date,
@@ -446,13 +427,14 @@ def vehicle_stats():
         active_page="vehicle_stats",
     )
 
+
 @app.route("/vehicle_stats/data", methods=["GET"])
 def vehicle_stats_data():
     filter_type = request.args.get("filter", "today")
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
     group_mode = request.args.get("group", "company")
-
+    
     context = build_vehicle_stats_context(
         filter_type, start_date_str, end_date_str, group_mode
     )
@@ -486,6 +468,7 @@ def vehicle_stats_data():
             ),
         }
     )
+
 
 @app.route("/db_check", methods=["GET"])
 def db_check():
