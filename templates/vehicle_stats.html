@@ -150,6 +150,44 @@
         margin-bottom: 20px;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
       }
+
+      .mode-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: 4px;
+      }
+      .mode-toggle-label {
+        color: #5c9c13;
+        font-weight: 700;
+        margin-bottom: 0;
+      }
+      .mode-toggle-pill {
+        display: inline-flex;
+        align-items: center;
+        background: #d8f1bb;
+        border: 2px solid #5c9c13;
+        border-radius: 999px;
+        padding: 3px;
+      }
+      .mode-toggle-option {
+        min-width: 132px;
+        text-align: center;
+        text-decoration: none;
+        color: #143800;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 8px 16px;
+        transition: all 0.2s ease;
+      }
+      .mode-toggle-option:hover {
+        color: #143800;
+        background: rgba(92, 156, 19, 0.12);
+      }
+      .mode-toggle-option.active {
+        background: #5c9c13;
+        color: #fff;
+      }
       @media (max-width: 768px) {
         :root {
           --sidebar-expanded: 220px;
@@ -198,15 +236,16 @@
             <div class="summary-card">
               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div class="d-flex flex-wrap align-items-center gap-2">
-                  <a href="{{ url_for('vehicle_stats', filter='today', group=group_mode, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Today</a>
-                  <a href="{{ url_for('vehicle_stats', filter='yesterday', group=group_mode, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Yesterday</a>
-                  <a href="{{ url_for('vehicle_stats', filter='this_week', group=group_mode, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">This Week</a>
-                  <a href="{{ url_for('vehicle_stats', filter='last_week', group=group_mode, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Last Week</a>
-                  <a href="{{ url_for('vehicle_stats', filter='this_month', group=group_mode, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">This Month</a>
-                  <a href="{{ url_for('vehicle_stats', filter='last_month', group=group_mode, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Last Month</a>
+                      <a href="{{ url_for('vehicle_stats', filter='today', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Today</a>
+                      <a href="{{ url_for('vehicle_stats', filter='yesterday', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Yesterday</a>
+                      <a href="{{ url_for('vehicle_stats', filter='this_week', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">This Week</a>
+                      <a href="{{ url_for('vehicle_stats', filter='last_week', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Last Week</a>
+                      <a href="{{ url_for('vehicle_stats', filter='this_month', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">This Month</a>
+                      <a href="{{ url_for('vehicle_stats', filter='last_month', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Last Month</a>
                   <form method="get" class="d-inline">
                     <input type="hidden" name="filter" value="custom">
                     <input type="hidden" name="group" value="{{ group_mode }}">
+                    <input type="hidden" name="date_field" value="{{ date_field }}">
                     <input type="date" name="start_date" id="customStartDate" required>
                     <input type="date" name="end_date" id="customEndDate" required>
                     {% if live_enabled %}
@@ -215,10 +254,27 @@
                     <button type="submit" class="btn btn-sm btn-primary">Custom</button>
                   </form>
                   {% if group_mode == 'branch' %}
-                    <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='company', live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Insurance</a>
+                       <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='company', date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Insurance</a>
                   {% else %}
-                    <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='branch', live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Branch</a>
+                       <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='branch', date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Branch</a>
                   {% endif %}
+                  <div class="mode-toggle">
+                    <span class="mode-toggle-label">Mode</span>
+                    <div class="mode-toggle-pill" role="group" aria-label="Date query mode">
+                      <a
+                        href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group=group_mode, date_field='recovered', live=1 if live_enabled else None) }}"
+                        class="mode-toggle-option date-field-link{% if date_field == 'recovered' %} active{% endif %}"
+                      >
+                        Date Recovered
+                      </a>
+                      <a
+                        href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group=group_mode, date_field='entered', live=1 if live_enabled else None) }}"
+                        class="mode-toggle-option date-field-link{% if date_field == 'entered' %} active{% endif %}"
+                      >
+                        Date Entered
+                      </a>
+                    </div>
+                  </div>
                 </div>
                 <div class="form-check ms-2">
                   <input class="form-check-input" type="checkbox" id="liveToggle" {% if live_enabled %}checked{% endif %}>
@@ -231,6 +287,7 @@
               <div class="col-lg-6">
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                   <h5 class="text-success mb-0" id="dateRangeLabel">Showing: {{ date_range_label }}</h5>
+                  <span class="badge bg-success" id="dateFieldLabel">Query Date: {{ date_field_label }}</span>
                 </div>
                 <table class="table table-striped">
                   <thead>
@@ -314,6 +371,7 @@
       const liveCheckbox = document.getElementById('liveToggle');
       const customStartDate = document.getElementById('customStartDate');
       const customEndDate = document.getElementById('customEndDate');
+      const dateFieldLabel = document.getElementById('dateFieldLabel');
 
       function syncCustomEndDate() {
         if (!customStartDate || !customEndDate) return;
@@ -484,6 +542,9 @@
           rebuildTable(data);
           updateChartData(data);
           rebuildDetailsTable(data);
+          if (dateFieldLabel && data.date_field_label) {
+            dateFieldLabel.textContent = `Query Date: ${data.date_field_label}`;
+          }
         } catch (err) {
           console.error('Live vehicle stats refresh failed', err);
         }
@@ -515,6 +576,15 @@
       function syncLiveControls(enabled) {
         syncLiveParam(enabled);
         document.querySelectorAll('.date-link').forEach((link) => {
+          const url = new URL(link.href);
+          if (enabled) {
+            url.searchParams.set('live', '1');
+          } else {
+            url.searchParams.delete('live');
+          }
+          link.href = url.toString();
+        });
+        document.querySelectorAll('.date-field-link').forEach((link) => {
           const url = new URL(link.href);
           if (enabled) {
             url.searchParams.set('live', '1');
