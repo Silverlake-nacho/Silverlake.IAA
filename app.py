@@ -44,11 +44,11 @@ IAA_INSURANCE_COMPANY_NAME = os.getenv("IAA_INSURANCE_COMPANY_NAME", "IAA")
 
 DATE_FIELD_CONFIG = {
     "recovered": {
-        "expression": "CAST(sr.DateRecovered AS datetime2)",
+        "expression": "sr.DateRecovered",
         "label": "Date Recovered",
     },
     "entered": {
-        "expression": "CAST(v.DateEntered AS datetime2)",
+        "expression": "v.DateEntered",
         "label": "Date Entered",
     },
 }
