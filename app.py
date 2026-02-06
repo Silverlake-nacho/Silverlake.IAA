@@ -42,6 +42,23 @@ ATLAS_DB_TRUST_CERT = os.getenv("ATLAS_DB_TRUST_CERT", "yes")
 ATLAS_DETAIL_LIMIT = int(os.getenv("ATLAS_DETAIL_LIMIT", "500"))
 IAA_INSURANCE_COMPANY_NAME = os.getenv("IAA_INSURANCE_COMPANY_NAME", "IAA")
 
+DATE_FIELD_CONFIG = {
+    "recovered": {
+        "expression": "CAST(sr.DateRecovered AS datetime2)",
+        "label": "Date Recovered",
+    },
+    "entered": {
+        "expression": "CAST(v.DateEntered AS datetime2)",
+        "label": "Date Entered",
+    },
+}
+
+
+def resolve_date_field(date_field: str):
+    return DATE_FIELD_CONFIG.get(date_field, DATE_FIELD_CONFIG["recovered"]), (
+        date_field if date_field in DATE_FIELD_CONFIG else "recovered"
+    )
+
 def _get_atlas_db_name_candidates() -> List[str]:
     explicit_names = [name.strip() for name in ATLAS_DB_NAMES.split(",") if name.strip()]
     if ATLAS_DB_NAME:
@@ -88,7 +105,9 @@ def get_atlas_db_connection(database_name: str):
     return pyodbc.connect(conn_str, timeout=150)
 
 
-def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date):
+def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date, date_field: str):
+    date_field_config, _ = resolve_date_field(date_field)
+    date_expression = date_field_config["expression"]
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
@@ -102,8 +121,8 @@ def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date):
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
                 INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
                 INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
-                WHERE CAST(sr.DateRecovered AS datetime2) >= ?
-                  AND CAST(sr.DateRecovered AS datetime2) < ?
+                WHERE {date_expression} >= ?
+                  AND {date_expression} < ?
                   AND ic.Name = ?
                 GROUP BY ic.Name
                 ORDER BY VehicleCount DESC, ic.Name
@@ -118,13 +137,15 @@ def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date):
     raise last_error if last_error else RuntimeError("No Atlas database names configured.")
 
 
-def fetch_atlas_vehicle_counts_by_branch(start_date: date, end_date: date):
+def fetch_atlas_vehicle_counts_by_branch(start_date: date, end_date: date, date_field: str):
+    date_field_config, _ = resolve_date_field(date_field)
+    date_expression = date_field_config["expression"]
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
-            query = """
+            query = f"""
                 SELECT
                     ib.Name AS InsuranceBranch,
                     COUNT(*) AS VehicleCount
@@ -133,8 +154,8 @@ def fetch_atlas_vehicle_counts_by_branch(start_date: date, end_date: date):
                 INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
                 INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
                 LEFT JOIN ContractGroups cg ON ic.ContractGroupId = cg.Id
-                WHERE CAST(sr.DateRecovered AS datetime2) >= ?
-                  AND CAST(sr.DateRecovered AS datetime2) < ?
+                WHERE {date_expression} >= ?
+                  AND {date_expression} < ?
                   AND ic.Name = ?
                 GROUP BY ib.Name
                 ORDER BY VehicleCount DESC, InsuranceBranch
@@ -149,8 +170,10 @@ def fetch_atlas_vehicle_counts_by_branch(start_date: date, end_date: date):
     raise last_error if last_error else RuntimeError("No Atlas database names configured.")
 
 
-def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date):
+def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, date_field: str):
     detail_limit = max(1, min(ATLAS_DETAIL_LIMIT, 5000))
+    date_field_config, _ = resolve_date_field(date_field)
+    date_expression = date_field_config["expression"]
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
@@ -208,8 +231,8 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date):
                 ) ss
                 LEFT JOIN PartDataColours col ON v.ColourId = col.Id
                 LEFT JOIN StatusColors stc ON v.StatusEnum = stc.Id
-                WHERE CAST(sr.DateRecovered AS datetime2) >= ?
-                  AND CAST(sr.DateRecovered AS datetime2) < ?
+                WHERE {date_expression} >= ?
+                  AND {date_expression} < ?
                   AND ic.Name = ?
                 ORDER BY v.Id DESC
             """
@@ -289,17 +312,21 @@ def build_vehicle_stats_context(
     start_date_str: Optional[str],
     end_date_str: Optional[str],
     group_mode: str,
+    date_field: str,
 ):
     start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
     date_range_label = describe_date_range(filter_type, start_date, end_date)
+    date_field_config, resolved_date_field = resolve_date_field(date_field)
 
     resolved_group_mode = "branch" if group_mode in {"branch", "contract"} else "company"
     if resolved_group_mode == "branch":
-        database_name, rows = fetch_atlas_vehicle_counts_by_branch(start_date, end_date)
+                database_name, rows = fetch_atlas_vehicle_counts_by_branch(
+            start_date, end_date, resolved_date_field
+        )
     else:
         database_name, rows = fetch_atlas_vehicle_counts_by_insurance(start_date, end_date)
     details_db_name, detail_columns, detail_rows = fetch_atlas_vehicle_details_by_insurance(
-        start_date, end_date
+        start_date, end_date, resolved_date_field
     )
     if resolved_group_mode == "branch":
         filtered_rows = [(row[0], int(row[1])) for row in rows]
@@ -329,6 +356,8 @@ def build_vehicle_stats_context(
         "group_mode": resolved_group_mode,
         "entity_label": entity_label,
         "chart_title_base": chart_title_base,
+        "date_field": resolved_date_field,
+        "date_field_label": date_field_config["label"],
     }
 
 
@@ -387,6 +416,7 @@ def vehicle_stats():
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
     group_mode = request.args.get("group", "company")
+    date_field = request.args.get("date_field", "recovered")
     live_enabled = str(request.args.get("live", "")).lower() in {"1", "true", "yes", "on"}
 
     error_message = None
@@ -395,7 +425,7 @@ def vehicle_stats():
     entity_label = "Insurance Branch" if group_mode in {"branch", "contract"} else "Insurance Company"
     try:
         context = build_vehicle_stats_context(
-            filter_type, start_date_str, end_date_str, group_mode
+            filter_type, start_date_str, end_date_str, group_mode, date_field
         )
     except Exception as exc:
         last_error = exc
@@ -414,6 +444,8 @@ def vehicle_stats():
             "group_mode": group_mode,
             "entity_label": entity_label,
             "chart_title_base": f"Vehicles by {entity_label}",
+            "date_field": "recovered",
+            "date_field_label": DATE_FIELD_CONFIG["recovered"]["label"],
         }
 
     if last_error is not None:
@@ -434,9 +466,10 @@ def vehicle_stats_data():
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
     group_mode = request.args.get("group", "company")
+    date_field = request.args.get("date_field", "recovered")
     
     context = build_vehicle_stats_context(
-        filter_type, start_date_str, end_date_str, group_mode
+        filter_type, start_date_str, end_date_str, group_mode, date_field
     )
 
     detail_rows = []
@@ -466,6 +499,10 @@ def vehicle_stats_data():
             "chart_title_base": context.get(
                 "chart_title_base", "Vehicles by Insurance Company"
             ),
+             "date_field": context.get("date_field", "recovered"),
+            "date_field_label": context.get(
+                "date_field_label", DATE_FIELD_CONFIG["recovered"]["label"]
+            ),
         }
     )
 
@@ -474,7 +511,7 @@ def vehicle_stats_data():
 def db_check():
     start_ts = time.time()
     try:
-        database_name, _ = fetch_atlas_vehicle_counts_by_insurance(date.today(), date.today())
+        database_name, _ = fetch_atlas_vehicle_counts_by_insurance(date.today(), date.today(), "recovered")
         conn = get_atlas_db_connection(database_name)
         cur = conn.cursor()
         cur.execute("SELECT 1")
