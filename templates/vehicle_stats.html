@@ -2,54 +2,117 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Vehicle Stats</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Silverlake Vehicle Stats</title>
+  <link rel="icon" href="{{ url_for('static', filename='logo-slg-strip.svg') }}">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     body {
-      background: #f8f9fa;
+      margin: 0;
+      background: url("{{ url_for('static', filename='background.jpg') }}") no-repeat center center fixed;
+      background-size: cover;
       font-family: 'Montserrat', sans-serif;
       color: #212529;
       min-height: 100vh;
     }
-    .page-header {
-      background: #ffffff;
-      border-bottom: 1px solid #e9ecef;
+
+    .page-shell {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px 14px 30px;
     }
-    .page-header h1 {
-      font-weight: 700;
+
+    .top-brand {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .top-brand img {
+      width: 180px;
+      max-width: 58vw;
+      height: auto;
+    }
+
+    .top-brand .title {
       color: #5c9c13;
+      font-weight: 700;
+      margin: 0;
     }
-    .summary-card {
-      background: #ffffff;
-      border-radius: 12px;
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.92);
+      border-radius: 16px;
       padding: 20px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
     }
-    .badge-total {
-      font-size: 1rem;
+
+    .section-title {
+      color: #5c9c13;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .btn-primary {
+      background-color: #5c9c13;
+      border-color: #5c9c13;
+    }
+
+    .btn-primary:hover,
+    .btn-primary:focus {
+      background-color: #4b810f;
+      border-color: #4b810f;
+    }
+
+    .summary-pill {
       background: #5c9c13;
+      color: #fff;
+      border-radius: 999px;
+      font-weight: 600;
+      padding: 8px 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
     }
-    .filter-card {
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-    }
+
     .table thead th {
       background: #f1f3f5;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .table-responsive {
+      max-height: 480px;
+    }
+
+    .quick-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .quick-filters .btn {
+      border-radius: 999px;
+      font-size: 0.86rem;
+      padding: 4px 12px;
     }
   </style>
 </head>
 <body>
-  <header class="page-header py-3 mb-4">
-    <div class="container d-flex flex-wrap justify-content-between align-items-center gap-3">
+  <div class="page-shell">
+    <div class="top-brand">
       <div>
-        <h1 class="h3 mb-1">Vehicle Stats</h1>
+        <h1 class="h3 title">Vehicle Stats</h1>
         <div class="text-muted">{{ date_range_label }}</div>
       </div>
-      <div class="d-flex align-items-center gap-3">
-        <div class="text-muted">Signed in as {{ current_user or 'User' }}</div>
+      <div class="d-flex align-items-center gap-2">
+        <img src="{{ url_for('static', filename='logo-slg-strip.svg') }}" alt="Silverlake Logo">
         <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Logout</a>
       </div>
     </div>
@@ -62,27 +125,37 @@
 
     <div class="row g-4">
       <div class="col-lg-4">
-        <div class="filter-card">
+        <div class="glass-card">
+          <h2 class="h5 section-title">Filters</h2>
+
+          <div class="quick-filters">
+            {% for option in ['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month', 'this_year', 'last_year'] %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vehicle_stats', filter=option, group=group_mode, live=1) }}">{{ option.replace('_', ' ')|title }}</a>
+            {% endfor %}
+          </div>
+
           <form method="get" action="{{ url_for('vehicle_stats') }}">
             <input type="hidden" name="live" value="1">
+            
             <div class="mb-3">
               <label class="form-label">Date filter</label>
               <select class="form-select" name="filter">
                 {% for option in ['today','yesterday','this_week','last_week','this_month','last_month','this_year','last_year','custom'] %}
-                  <option value="{{ option }}" {% if filter_type == option %}selected{% endif %}>
-                    {{ option.replace('_', ' ')|title }}
-                  </option>
+                  <option value="{{ option }}" {% if filter_type == option %}selected{% endif %}>{{ option.replace('_', ' ')|title }}</option>
                 {% endfor %}
               </select>
             </div>
+            
             <div class="mb-3">
               <label class="form-label">Start date</label>
               <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
             </div>
+            
             <div class="mb-3">
               <label class="form-label">End date</label>
               <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
             </div>
+            
             <div class="mb-3">
               <label class="form-label">Grouping</label>
               <select class="form-select" name="group">
@@ -90,9 +163,10 @@
                 <option value="contract" {% if group_mode == 'contract' %}selected{% endif %}>Contract Group</option>
               </select>
             </div>
+            
             <div class="mb-3">
               <label class="form-label">Exclude {{ entity_label|lower }}s</label>
-              <div class="border rounded p-2" style="max-height: 200px; overflow:auto;">
+              <div class="border rounded p-2 bg-white" style="max-height: 210px; overflow:auto;">
                 {% if all_companies %}
                   {% for company in all_companies %}
                     <div class="form-check">
@@ -104,6 +178,7 @@
                   <div class="text-muted small">No {{ entity_label|lower }}s available to exclude.</div>
                 {% endif %}
               </div>
+              
             </div>
             <button class="btn btn-primary w-100" type="submit">Load stats</button>
           </form>
@@ -111,21 +186,20 @@
       </div>
 
       <div class="col-lg-8">
-        <div class="summary-card mb-4">
+        <div class="glass-card mb-4">
           {% if not live_enabled %}
-            <div class="alert alert-info mb-3">
-              Select your filters and click <strong>Load stats</strong> to fetch data.
-            </div>
+            <div class="alert alert-info mb-3">Select your filters and click <strong>Load stats</strong> to fetch data.</div>
           {% endif %}
-          <div class="d-flex justify-content-between align-items-center mb-3">
+
+          <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
             <div>
               <div class="text-muted">Database</div>
               <div class="fw-semibold">{{ database_name or 'Not connected' }}</div>
             </div>
-            <span class="badge badge-total text-white">Total: {{ sum_total }}</span>
+            <span class="summary-pill">Total Vehicles: {{ sum_total }}</span>
           </div>
           <div class="table-responsive">
-            <table class="table table-striped align-middle">
+            <table class="table table-striped align-middle mb-0">
               <thead>
                 <tr>
                   <th>{{ entity_label }}</th>
@@ -150,10 +224,10 @@
           </div>
         </div>
 
-        <div class="summary-card">
-          <h2 class="h5 mb-3">Vehicle Detail</h2>
+        <div class="glass-card">
+          <h2 class="h5 section-title">Vehicle Detail</h2>
           <div class="table-responsive">
-            <table class="table table-sm table-bordered align-middle">
+            <table class="table table-sm table-bordered align-middle mb-0">
               <thead>
                 <tr>
                   {% for column in detail_columns %}
@@ -181,6 +255,6 @@
         </div>
       </div>
     </div>
-  </main>
+  </div>
 </body>
 </html>
