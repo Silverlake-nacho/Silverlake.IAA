@@ -10,13 +10,8 @@ from flask import (
 from datetime import date, datetime, timedelta
 import time
 from typing import List, Optional, Tuple
-import json
 import os
 import pyodbc
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATS_EXCLUSIONS_PATH = os.path.join(BASE_DIR, "stats_exclusions.json")
 
 app = Flask(__name__)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
@@ -45,46 +40,6 @@ ATLAS_DB_ENCRYPT = os.getenv("ATLAS_DB_ENCRYPT", "yes")
 ATLAS_DB_TRUST_CERT = os.getenv("ATLAS_DB_TRUST_CERT", "yes")
 ATLAS_DETAIL_LIMIT = int(os.getenv("ATLAS_DETAIL_LIMIT", "500"))
 IAA_INSURANCE_COMPANY_NAME = os.getenv("IAA_INSURANCE_COMPANY_NAME", "IAA")
-
-def _load_json_file(path: str, fallback):
-    if not os.path.exists(path):
-        return fallback
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except Exception:
-        return fallback
-
-
-def _normalise_exclusion_store(raw_data) -> dict:
-    if not isinstance(raw_data, dict):
-        return {}
-    normalised = {}
-    for user, payload in raw_data.items():
-        if isinstance(payload, dict):
-            normalised[user] = {
-                "insurance_company": [
-                    str(item) for item in payload.get("insurance_company", [])
-                ],
-            }
-    return normalised
-
-
-def load_stats_exclusions(user: Optional[str], dimension: str) -> List[str]:
-    raw_data = _load_json_file(STATS_EXCLUSIONS_PATH, {})
-    store = _normalise_exclusion_store(raw_data)
-    key = user or "__default__"
-    return store.get(key, {}).get(dimension, [])
-
-
-def persist_stats_exclusions(user: Optional[str], dimension: str, exclusions: List[str]) -> None:
-    raw_data = _load_json_file(STATS_EXCLUSIONS_PATH, {})
-    store = _normalise_exclusion_store(raw_data)
-    key = user or "__default__"
-    user_entry = store.setdefault(key, {"insurance_company": []})
-    user_entry[dimension] = [str(item) for item in exclusions]
-    with open(STATS_EXCLUSIONS_PATH, "w", encoding="utf-8") as handle:
-        json.dump(store, handle)
 
 
 def _get_atlas_db_name_candidates() -> List[str]:
@@ -333,7 +288,6 @@ def build_vehicle_stats_context(
     filter_type: str,
     start_date_str: Optional[str],
     end_date_str: Optional[str],
-    exclude_args: List[str],
     group_mode: str,
 ):
     start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
@@ -347,17 +301,12 @@ def build_vehicle_stats_context(
     details_db_name, detail_columns, detail_rows = fetch_atlas_vehicle_details_by_insurance(
         start_date, end_date
     )
-    current_user = session.get("username")
-    default_exclusions = load_stats_exclusions(current_user, "insurance_company")
-    excluded_companies = exclude_args or default_exclusions
-
+    
     if resolved_group_mode == "branch":
         filtered_rows = [(row[0], int(row[1])) for row in rows]
-        all_companies = [IAA_INSURANCE_COMPANY_NAME]
         entity_label = "Insurance Branch"
     else:
-        filtered_rows = [(row[0], int(row[1])) for row in rows if row[0] not in excluded_companies]
-        all_companies = sorted({row[0] for row in rows})
+        filtered_rows = [(row[0], int(row[1])) for row in rows]
         entity_label = "Insurance Company"
 
     sum_total = sum(row[1] for row in filtered_rows)
@@ -375,8 +324,6 @@ def build_vehicle_stats_context(
         "sum_total": sum_total,
         "chart_labels": chart_labels,
         "chart_values": chart_values,
-        "all_companies": all_companies,
-        "excluded_companies": excluded_companies,
         "database_name": database_name or details_db_name,
         "detail_columns": detail_columns,
         "detail_rows": detail_rows,
@@ -440,7 +387,6 @@ def vehicle_stats():
     filter_type = request.args.get("filter", "today")
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
-    excluded_args = request.args.getlist("exclude")
     group_mode = request.args.get("group", "company")
     live_enabled = str(request.args.get("live", "")).lower() in {"1", "true", "yes", "on"}
 
@@ -451,7 +397,7 @@ def vehicle_stats():
     if live_enabled:
         try:
             context = build_vehicle_stats_context(
-                filter_type, start_date_str, end_date_str, excluded_args, group_mode
+                filter_type, start_date_str, end_date_str, group_mode
             )
         except Exception as exc:
             last_error = exc
@@ -464,8 +410,6 @@ def vehicle_stats():
                 "sum_total": 0,
                 "chart_labels": [],
                 "chart_values": [],
-                "all_companies": [],
-                "excluded_companies": excluded_args,
                 "database_name": None,
                 "detail_columns": [],
                 "detail_rows": [],
@@ -483,8 +427,6 @@ def vehicle_stats():
             "sum_total": 0,
             "chart_labels": [],
             "chart_values": [],
-            "all_companies": [],
-            "excluded_companies": excluded_args,
             "database_name": None,
             "detail_columns": [],
             "detail_rows": [],
@@ -504,17 +446,15 @@ def vehicle_stats():
         active_page="vehicle_stats",
     )
 
-
 @app.route("/vehicle_stats/data", methods=["GET"])
 def vehicle_stats_data():
     filter_type = request.args.get("filter", "today")
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
-    excluded_args = request.args.getlist("exclude")
     group_mode = request.args.get("group", "company")
 
     context = build_vehicle_stats_context(
-        filter_type, start_date_str, end_date_str, excluded_args, group_mode
+        filter_type, start_date_str, end_date_str, group_mode
     )
 
     detail_rows = []
@@ -547,7 +487,6 @@ def vehicle_stats_data():
         }
     )
 
-
 @app.route("/db_check", methods=["GET"])
 def db_check():
     start_ts = time.time()
@@ -564,31 +503,6 @@ def db_check():
     except Exception as exc:
         elapsed_ms = int((time.time() - start_ts) * 1000)
         return jsonify({"status": "error", "error": str(exc), "elapsed_ms": elapsed_ms}), 500
-
-
-
-@app.route("/vehicle_stats/exclusions", methods=["POST"])
-def save_vehicle_stats_exclusions():
-    filter_type = request.form.get("filter", "today")
-    start_date = request.form.get("start_date")
-    end_date = request.form.get("end_date")
-    excluded_companies = request.form.getlist("exclude")
-    group_mode = request.form.get("group", "company")
-
-    user = session.get("username")
-    persist_stats_exclusions(user, "insurance_company", excluded_companies)
-
-    return redirect(
-        url_for(
-            "vehicle_stats",
-            filter=filter_type,
-            start_date=start_date,
-            end_date=end_date,
-            exclude=excluded_companies,
-            group=group_mode,
-        )
-    )
-
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
