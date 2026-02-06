@@ -163,7 +163,7 @@ def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date):
     raise last_error if last_error else RuntimeError("No Atlas database names configured.")
 
 
-def fetch_atlas_vehicle_counts_by_contract_group(start_date: date, end_date: date):
+def fetch_atlas_vehicle_counts_by_branch(start_date: date, end_date: date):
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
@@ -171,8 +171,7 @@ def fetch_atlas_vehicle_counts_by_contract_group(start_date: date, end_date: dat
             cur = conn.cursor()
             query = """
                 SELECT
-                    COALESCE(cg.Name, 'Unassigned') AS ContractGroup,
-                    ic.Name AS InsuranceCompany,
+                    ib.Name AS InsuranceBranch,
                     COUNT(*) AS VehicleCount
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
@@ -182,8 +181,8 @@ def fetch_atlas_vehicle_counts_by_contract_group(start_date: date, end_date: dat
                 WHERE CAST(sr.DateRecovered AS datetime2) >= ?
                   AND CAST(sr.DateRecovered AS datetime2) < ?
                   AND ic.Name = ?
-                GROUP BY COALESCE(cg.Name, 'Unassigned'), ic.Name
-                ORDER BY VehicleCount DESC, ContractGroup
+                GROUP BY ib.Name
+                ORDER BY VehicleCount DESC, InsuranceBranch
             """
             cur.execute(query, (start_date, end_date, IAA_INSURANCE_COMPANY_NAME))
             rows = cur.fetchall()
@@ -340,11 +339,9 @@ def build_vehicle_stats_context(
     start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
     date_range_label = describe_date_range(filter_type, start_date, end_date)
 
-    resolved_group_mode = "contract" if group_mode == "contract" else "company"
-    if resolved_group_mode == "contract":
-        database_name, rows = fetch_atlas_vehicle_counts_by_contract_group(
-            start_date, end_date
-        )
+    resolved_group_mode = "branch" if group_mode in {"branch", "contract"} else "company"
+    if resolved_group_mode == "branch":
+        database_name, rows = fetch_atlas_vehicle_counts_by_branch(start_date, end_date)
     else:
         database_name, rows = fetch_atlas_vehicle_counts_by_insurance(start_date, end_date)
     details_db_name, detail_columns, detail_rows = fetch_atlas_vehicle_details_by_insurance(
@@ -354,20 +351,10 @@ def build_vehicle_stats_context(
     default_exclusions = load_stats_exclusions(current_user, "insurance_company")
     excluded_companies = exclude_args or default_exclusions
 
-    if resolved_group_mode == "contract":
-        group_totals: dict[str, int] = {}
-        all_companies = sorted({row[1] for row in rows})
-        for contract_group, company, count in rows:
-            if company in excluded_companies:
-                continue
-            group_totals[contract_group] = group_totals.get(contract_group, 0) + int(
-                count
-            )
-        filtered_rows = sorted(
-            group_totals.items(),
-            key=lambda item: (-item[1], item[0]),
-        )
-        entity_label = "Contract Group"
+    if resolved_group_mode == "branch":
+        filtered_rows = [(row[0], int(row[1])) for row in rows]
+        all_companies = [IAA_INSURANCE_COMPANY_NAME]
+        entity_label = "Insurance Branch"
     else:
         filtered_rows = [(row[0], int(row[1])) for row in rows if row[0] not in excluded_companies]
         all_companies = sorted({row[0] for row in rows})
@@ -460,7 +447,7 @@ def vehicle_stats():
     error_message = None
     last_error = None
     start_date, end_date = parse_date_filter(filter_type, start_date_str, end_date_str)
-    entity_label = "Contract Group" if group_mode == "contract" else "Insurance Company"
+    entity_label = "Insurance Branch" if group_mode in {"branch", "contract"} else "Insurance Company"
     if live_enabled:
         try:
             context = build_vehicle_stats_context(
