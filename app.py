@@ -113,7 +113,7 @@ def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date, da
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
-            query = """
+            query = f"""
                 SELECT
                     ic.Name,
                     COUNT(*) AS VehicleCount
