@@ -175,45 +175,9 @@
           <img src="{{ url_for('static', filename='logo-slg-strip.svg') }}" alt="Silverlake Logo" class="logo-expanded">
         </div>
         <div class="nav-section">
-          <a href="{{ url_for('index') }}" class="nav-link{% if active_page == 'index' %} active{% endif %}">
-            <i class="fas fa-magnifying-glass-dollar"></i>
-            <span class="link-text">Opportunity Finder</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-chart-pie"></i>
-            <span class="link-text">Image Stats</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-clock"></i>
-            <span class="link-text">Image Timeline</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-chart-column"></i>
-            <span class="link-text">Sales Stats</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-boxes-stacked"></i>
-            <span class="link-text">Inventory Stats</span>
-          </a>
           <a href="{{ url_for('vehicle_stats') }}" class="nav-link{% if active_page == 'vehicle_stats' %} active{% endif %}">
             <i class="fas fa-car-side"></i>
             <span class="link-text">Vehicle Stats</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-truck"></i>
-            <span class="link-text">Atlas Vehicle Stats</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-table"></i>
-            <span class="link-text">Atlas Table Samples</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-car-burst"></i>
-            <span class="link-text">Crush Vehicles</span>
-          </a>
-          <a href="#" class="nav-link">
-            <i class="fas fa-clipboard-list"></i>
-            <span class="link-text">Logs</span>
           </a>
         </div>
         <div class="sidebar-footer">
@@ -230,7 +194,7 @@
               <img src="{{ url_for('static', filename='logo-slg-strip.svg') }}" alt="Silverlake Logo">
             </div>
 
-            <h1 class="mb-4 text-center">Vehicle Stats</h1>
+            <h1 class="mb-4 text-center">Silverlake IAA Portal</h1>
 
             {% if error_message %}
               <div class="alert alert-danger" role="alert">{{ error_message }}</div>
