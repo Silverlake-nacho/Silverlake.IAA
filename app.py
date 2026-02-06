@@ -44,6 +44,7 @@ ATLAS_DB_DRIVER = os.getenv("ATLAS_DB_DRIVER", "ODBC Driver 18 for SQL Server")
 ATLAS_DB_ENCRYPT = os.getenv("ATLAS_DB_ENCRYPT", "yes")
 ATLAS_DB_TRUST_CERT = os.getenv("ATLAS_DB_TRUST_CERT", "yes")
 ATLAS_DETAIL_LIMIT = int(os.getenv("ATLAS_DETAIL_LIMIT", "500"))
+IAA_INSURANCE_COMPANY_NAME = os.getenv("IAA_INSURANCE_COMPANY_NAME", "IAA")
 
 def _load_json_file(path: str, fallback):
     if not os.path.exists(path):
@@ -148,10 +149,11 @@ def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date):
                 INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
                 WHERE CAST(sr.DateRecovered AS datetime2) >= ?
                   AND CAST(sr.DateRecovered AS datetime2) < ?
+                  AND ic.Name = ?
                 GROUP BY ic.Name
                 ORDER BY VehicleCount DESC, ic.Name
             """
-            cur.execute(query, (start_date, end_date))
+            cur.execute(query, (start_date, end_date, IAA_INSURANCE_COMPANY_NAME))
             rows = cur.fetchall()
             cur.close()
             conn.close()
@@ -179,10 +181,11 @@ def fetch_atlas_vehicle_counts_by_contract_group(start_date: date, end_date: dat
                 LEFT JOIN ContractGroups cg ON ic.ContractGroupId = cg.Id
                 WHERE CAST(sr.DateRecovered AS datetime2) >= ?
                   AND CAST(sr.DateRecovered AS datetime2) < ?
+                  AND ic.Name = ?
                 GROUP BY COALESCE(cg.Name, 'Unassigned'), ic.Name
                 ORDER BY VehicleCount DESC, ContractGroup
             """
-            cur.execute(query, (start_date, end_date))
+            cur.execute(query, (start_date, end_date, IAA_INSURANCE_COMPANY_NAME))
             rows = cur.fetchall()
             cur.close()
             conn.close()
@@ -253,9 +256,10 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date):
                 LEFT JOIN StatusColors stc ON v.StatusEnum = stc.Id
                 WHERE CAST(sr.DateRecovered AS datetime2) >= ?
                   AND CAST(sr.DateRecovered AS datetime2) < ?
+                  AND ic.Name = ?
                 ORDER BY v.Id DESC
             """
-            cur.execute(query, (start_date, end_date))
+            cur.execute(query, (start_date, end_date, IAA_INSURANCE_COMPANY_NAME))
             rows = cur.fetchall()
             columns = [desc[0] for desc in cur.description]
             cur.close()
