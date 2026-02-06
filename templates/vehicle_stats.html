@@ -150,16 +150,6 @@
         margin-bottom: 20px;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
       }
-      .exclusion-card .exclusion-body {
-        display: none;
-      }
-      .exclusion-card:hover .exclusion-body,
-      .exclusion-card:focus-within .exclusion-body {
-        display: block;
-      }
-      .exclusion-card {
-        background: rgba(255, 255, 255, 0.92);
-      }
       @media (max-width: 768px) {
         :root {
           --sidebar-expanded: 220px;
@@ -225,47 +215,14 @@
                     <button type="submit" class="btn btn-sm btn-primary">Custom</button>
                   </form>
                   {% if group_mode == 'branch' %}
-                    <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='company', exclude=excluded_companies, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Insurance</a>
+                    <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='company', live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Insurance</a>
                   {% else %}
-                    <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='branch', exclude=excluded_companies, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Branch</a>
+                    <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='branch', live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Branch</a>
                   {% endif %}
                 </div>
                 <div class="form-check ms-2">
                   <input class="form-check-input" type="checkbox" id="liveToggle" {% if live_enabled %}checked{% endif %}>
                   <label class="form-check-label text-success" for="liveToggle">Live</label>
-                </div>
-              </div>
-            </div>
-
-            <div class="card mb-4 shadow-sm exclusion-card">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <h5 class="mb-0">Exclude Insurance Companies</h5>
-                </div>
-                <div class="exclusion-body mt-3">
-                  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-                    <p class="mb-0 text-muted">Hover to show insurance company exclusions.</p>
-                    <div class="d-flex gap-2">
-                      <button type="submit" form="companyFilterForm" class="btn btn-sm btn-primary">Apply</button>
-                      <button type="submit" form="companyFilterForm" formaction="{{ url_for('save_vehicle_stats_exclusions') }}" formmethod="post" class="btn btn-sm btn-success">Set as Default</button>
-                      <small class="text-muted align-self-center">Defaults are saved per user.</small>
-                    </div>
-                  </div>
-                  <form id="companyFilterForm" class="row g-2" method="get" action="{{ url_for('vehicle_stats') }}">
-                    <input type="hidden" name="filter" value="{{ filter_type }}">
-                    <input type="hidden" name="group" value="{{ group_mode }}">
-                    <input type="hidden" name="start_date" value="{{ start_date.isoformat() if start_date else '' }}">
-                    <input type="hidden" name="end_date" value="{{ end_date.isoformat() if end_date else '' }}">
-                    <input type="hidden" id="liveInputField" name="live" value="{{ 1 if live_enabled else '' }}">
-                    {% for company in all_companies %}
-                      <div class="col-sm-6 col-md-4 col-lg-3">
-                        <div class="form-check">
-                          <input class="form-check-input" type="checkbox" name="exclude" value="{{ company }}" id="company-{{ loop.index }}" {% if company in excluded_companies %}checked{% endif %}>
-                          <label class="form-check-label" for="company-{{ loop.index }}">{{ company }}</label>
-                        </div>
-                      </div>
-                    {% endfor %}
-                  </form>
                 </div>
               </div>
             </div>
@@ -557,10 +514,6 @@
 
       function syncLiveControls(enabled) {
         syncLiveParam(enabled);
-        const liveInput = document.getElementById('liveInputField');
-        if (liveInput) {
-          liveInput.value = enabled ? '1' : '';
-        }
         document.querySelectorAll('.date-link').forEach((link) => {
           const url = new URL(link.href);
           if (enabled) {
