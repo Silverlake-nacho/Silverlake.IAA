@@ -320,11 +320,13 @@ def build_vehicle_stats_context(
 
     resolved_group_mode = "branch" if group_mode in {"branch", "contract"} else "company"
     if resolved_group_mode == "branch":
-                database_name, rows = fetch_atlas_vehicle_counts_by_branch(
+        database_name, rows = fetch_atlas_vehicle_counts_by_branch(
             start_date, end_date, resolved_date_field
         )
     else:
-        database_name, rows = fetch_atlas_vehicle_counts_by_insurance(start_date, end_date)
+        database_name, rows = fetch_atlas_vehicle_counts_by_insurance(
+            start_date, end_date, resolved_date_field
+        )
     details_db_name, detail_columns, detail_rows = fetch_atlas_vehicle_details_by_insurance(
         start_date, end_date, resolved_date_field
     )
