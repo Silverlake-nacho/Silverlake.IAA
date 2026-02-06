@@ -105,6 +105,59 @@ def get_atlas_db_connection(database_name: str):
     return pyodbc.connect(conn_str, timeout=150)
 
 
+def fetch_table_columns(cursor, table_name: str) -> List[str]:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = ?
+        """,
+        (table_name,),
+    )
+    return [row[0] for row in cursor.fetchall()]
+
+
+def resolve_vehicle_note_relationships(cursor):
+    table_columns = {
+        "CT_VehicleNotes": fetch_table_columns(cursor, "CT_VehicleNotes"),
+        "CT_VehicleNoteBodies": fetch_table_columns(cursor, "CT_VehicleNoteBodies"),
+    }
+    notes_set = set(table_columns["CT_VehicleNotes"])
+    bodies_set = set(table_columns["CT_VehicleNoteBodies"])
+
+    vehicle_fk = next(
+        (
+            candidate
+            for candidate in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"]
+            if candidate in notes_set
+        ),
+        None,
+    )
+    body_fk = next(
+        (
+            candidate
+            for candidate in ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId", "Id"]
+            if candidate in bodies_set
+        ),
+        None,
+    )
+    body_text_column = next(
+        (
+            candidate
+            for candidate in ["Body", "NoteBody", "Comment", "Contents", "Value", "Text"]
+            if candidate in bodies_set
+        ),
+        None,
+    )
+    return {
+        "vehicle_fk": vehicle_fk,
+        "body_fk": body_fk,
+        "body_text_column": body_text_column,
+        "notes_columns": table_columns["CT_VehicleNotes"],
+        "bodies_columns": table_columns["CT_VehicleNoteBodies"],
+    }
+
+
 def fetch_atlas_vehicle_counts_by_insurance(start_date: date, end_date: date, date_field: str):
     date_field_config, _ = resolve_date_field(date_field)
     date_expression = date_field_config["expression"]
@@ -179,6 +232,13 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
+            note_relationships = resolve_vehicle_note_relationships(cur)
+            vehicle_fk = note_relationships.get("vehicle_fk")
+            has_comments_expression = (
+                f"CASE WHEN EXISTS (SELECT 1 FROM CT_VehicleNotes vn WHERE vn.{vehicle_fk} = v.Id) THEN 'YES' ELSE 'NO' END AS HasComments"
+                if vehicle_fk
+                else "'NO' AS HasComments"
+            )
             query = f"""
                 SELECT
                     TOP ({detail_limit})
@@ -201,7 +261,8 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                     CAST(scn.DateCancelled AS datetime2) AS DateCancelled,
                     CAST(ss.DateSold AS datetime2) AS DateSold,
                     ss.IncVAT AS Sold_price,
-                    stc.Name AS Status
+                    stc.Name AS Status,
+                    {has_comments_expression}
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
                 LEFT JOIN PartDataManufacturers m ON v.ManufacturerId = m.Id
@@ -363,6 +424,95 @@ def build_vehicle_stats_context(
     }
 
 
+def get_atlas_vehicle_notes(vehicle_id: int):
+    last_error = None
+    for database_name in _get_atlas_db_name_candidates():
+        try:
+            conn = get_atlas_db_connection(database_name)
+            cur = conn.cursor()
+            note_relationships = resolve_vehicle_note_relationships(cur)
+            vehicle_fk = note_relationships.get("vehicle_fk")
+            if not vehicle_fk:
+                cur.close()
+                conn.close()
+                return []
+
+            available_note_columns = set(note_relationships.get("notes_columns", []))
+            selected_columns = ["Id"]
+            for candidate in [
+                "DateEntered",
+                "DateCreated",
+                "DateUpdated",
+                "CreatedOn",
+                "CreatedBy",
+                "UserId",
+                "Title",
+                "Subject",
+            ]:
+                if candidate in available_note_columns and candidate not in selected_columns:
+                    selected_columns.append(candidate)
+
+            selected_sql = ", ".join(f"vn.{column}" for column in selected_columns)
+            query = f"""
+                SELECT {selected_sql}
+                FROM CT_VehicleNotes vn
+                WHERE vn.{vehicle_fk} = ?
+                ORDER BY vn.Id DESC
+            """
+            cur.execute(query, (vehicle_id,))
+            rows = cur.fetchall()
+            results = []
+            for row in rows:
+                item = {}
+                for idx, column in enumerate(selected_columns):
+                    value = row[idx]
+                    if isinstance(value, (datetime, date)):
+                        value = value.strftime("%Y-%m-%d %H:%M:%S")
+                    item[column] = value
+                results.append(item)
+            cur.close()
+            conn.close()
+            return results
+        except Exception as exc:
+            last_error = exc
+    raise last_error if last_error else RuntimeError("No Atlas database names configured.")
+
+
+def get_atlas_vehicle_note_body(note_id: int):
+    last_error = None
+    for database_name in _get_atlas_db_name_candidates():
+        try:
+            conn = get_atlas_db_connection(database_name)
+            cur = conn.cursor()
+            note_relationships = resolve_vehicle_note_relationships(cur)
+            body_fk = note_relationships.get("body_fk")
+            body_text_column = note_relationships.get("body_text_column")
+            if not body_fk:
+                cur.close()
+                conn.close()
+                return {"content": ""}
+
+            select_clause = (
+                f"vnb.{body_text_column} AS BodyText" if body_text_column else "'' AS BodyText"
+            )
+            query = f"""
+                SELECT TOP (1) {select_clause}
+                FROM CT_VehicleNoteBodies vnb
+                WHERE vnb.{body_fk} = ?
+                ORDER BY vnb.Id DESC
+            """
+            cur.execute(query, (note_id,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if not row:
+                return {"content": ""}
+            return {"content": row[0] or ""}
+        except Exception as exc:
+            last_error = exc
+    raise last_error if last_error else RuntimeError("No Atlas database names configured.")
+
+
 @app.context_processor
 def inject_current_user():
     return {"current_user": session.get("username")}
@@ -508,6 +658,17 @@ def vehicle_stats_data():
         }
     )
 
+
+@app.route("/vehicle_notes/<int:vehicle_id>", methods=["GET"])
+def vehicle_notes(vehicle_id: int):
+    notes = get_atlas_vehicle_notes(vehicle_id)
+    return jsonify({"notes": notes})
+
+
+@app.route("/vehicle_note_body/<int:note_id>", methods=["GET"])
+def vehicle_note_body(note_id: int):
+    body = get_atlas_vehicle_note_body(note_id)
+    return jsonify(body)
 
 @app.route("/db_check", methods=["GET"])
 def db_check():
