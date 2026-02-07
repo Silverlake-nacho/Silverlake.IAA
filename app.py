@@ -436,7 +436,12 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                 try:
                     cur.execute(
                         f"""
-                        SELECT TOP (100) vn.Id
+                        SELECT TOP (100)
+                            vn.Id,
+                            vn.Subject,
+                            vn.UserName,
+                            CAST(vn.DateCreated AS datetime2) AS DateCreated,
+                            vn.IsSendToWeb
                         FROM CT_VehicleNotes vn
                         WHERE vn.{vehicle_fk} = ?
                         ORDER BY vn.Id DESC
@@ -444,7 +449,22 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                         (vehicle_id,),
                     )
                     rows = cur.fetchall()
-                    notes = [{"Id": row[0]} for row in rows]
+                    notes = []
+                    for row in rows:
+                        date_created = row[3]
+                        notes.append(
+                            {
+                                "Id": row[0],
+                                "Subject": row[1],
+                                "UserName": row[2],
+                                "DateCreated": (
+                                    date_created.strftime("%Y-%m-%d %H:%M:%S")
+                                    if isinstance(date_created, datetime)
+                                    else date_created
+                                ),
+                                "IsSendToWeb": row[4],
+                            }
+                        )
                     break
                 except Exception:
                     notes = None
