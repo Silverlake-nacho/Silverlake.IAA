@@ -369,10 +369,11 @@
                     </thead>
                     <tbody id="vehicleDetailsTableBody">
                       {% for row in detail_rows %}
+                        {% set row_index = loop.index0 %}
                         <tr>
                           {% for value in row %}
                             {% if detail_columns[loop.index0] == 'HasComments' and value == 'YES' %}
-                              <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[0] }}">YES</button></td>
+                              <td><button type="button" class="has-comments-btn" data-row-index="{{ row_index }}">YES</button></td>
                             {% else %}
                               <td>{{ value }}</td>
                             {% endif %}
@@ -428,9 +429,10 @@
       const customStartDate = document.getElementById('customStartDate');
       const customEndDate = document.getElementById('customEndDate');
       const dateFieldLabel = document.getElementById('dateFieldLabel');
+      const vehicleNotesModalLabel = document.getElementById('vehicleNotesModalLabel');
       const vehicleNotesList = document.getElementById('vehicleNotesList');
-      const noteBodyContent = document.getElementById('noteBodyContent');
       let detailColumnNames = {{ detail_columns|tojson }};
+      let detailRowsData = {{ detail_rows|tojson }};
 
       function syncCustomEndDate() {
         if (!customStartDate || !customEndDate) return;
@@ -570,7 +572,8 @@
         detailColumnNames = data.detail_columns || detailColumnNames || [];
         const commentsIndex = detailColumnNames.indexOf('HasComments');
         const detailRows = data.detail_rows || [];
-        detailRows.forEach((row) => {
+        detailRowsData = detailRows;
+        detailRows.forEach((row, rowIndex) => {
           const tr = document.createElement('tr');
           row.forEach((value, index) => {
             const td = document.createElement('td');
@@ -578,7 +581,7 @@
               const button = document.createElement('button');
               button.type = 'button';
               button.className = 'has-comments-btn';
-              button.dataset.vehicleId = row[0];
+              button.dataset.rowIndex = rowIndex;
               button.textContent = 'YES';
               td.appendChild(button);
             } else {
@@ -591,52 +594,35 @@
       }
 
       
-      function formatNoteSummary(note) {
-        const dateValue = note.DateEntered || note.DateCreated || note.DateUpdated || note.CreatedOn || '';
-        const userValue = note.CreatedBy || note.UserId || '';
-        const titleValue = note.Title || note.Subject || '';
-        return [note.Id ? `#${note.Id}` : '', dateValue, userValue, titleValue]
-          .filter(Boolean)
-          .join(' | ');
-      }
+      function showRecordDetails(rowIndex) {
+        const safeIndex = Number(rowIndex);
+        const row = Number.isInteger(safeIndex) ? detailRowsData[safeIndex] : null;
+        if (!row) {
+          vehicleNotesList.innerHTML = '<div class="text-danger">Unable to load record details.</div>';
+          bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
+          return;
+        }
+        const fieldRows = detailColumnNames
+          .map((columnName, index) => ({ columnName, value: row[index] }))
+          .filter((field) => field.columnName !== 'HasComments');
 
-      async function loadVehicleNotes(vehicleId) {
-        vehicleNotesList.innerHTML = '<div class="text-muted">Loading comments...</div>';
+        vehicleNotesModalLabel.textContent = 'Vehicle Record Details';
+        vehicleNotesList.innerHTML = `
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 35%;">Field</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${fieldRows.map((field) => `<tr><th>${field.columnName}</th><td>${field.value ?? ''}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
-        try {
-          const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
-          if (!response.ok) throw new Error('Unable to load notes');
-          const data = await response.json();
-          const notes = data.notes || [];
-          if (!notes.length) {
-            vehicleNotesList.innerHTML = '<div class="text-muted">No comments found for this vehicle.</div>';
-            return;
-          }
-          vehicleNotesList.innerHTML = '';
-          notes.forEach((note) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'note-row-btn';
-            button.dataset.noteId = note.Id;
-            button.textContent = formatNoteSummary(note);
-            vehicleNotesList.appendChild(button);
-          });
-        } catch (err) {
-          vehicleNotesList.innerHTML = `<div class="text-danger">${err.message}</div>`;
-        }
-      }
-
-      async function loadNoteBody(noteId) {
-        noteBodyContent.textContent = 'Loading comment body...';
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('noteBodyModal')).show();
-        try {
-          const response = await fetch(`/vehicle_note_body/${noteId}`, { cache: 'no-store' });
-          if (!response.ok) throw new Error('Unable to load comment body');
-          const data = await response.json();
-          noteBodyContent.textContent = data.content || '(No body text)';
-        } catch (err) {
-          noteBodyContent.textContent = err.message;
-        }
       }
 
       function buildDataUrl() {
@@ -747,13 +733,8 @@
 
       document.addEventListener('click', (event) => {
         const commentsButton = event.target.closest('.has-comments-btn');
-        if (commentsButton && commentsButton.dataset.vehicleId) {
-          loadVehicleNotes(commentsButton.dataset.vehicleId);
-          return;
-        }
-        const noteButton = event.target.closest('.note-row-btn');
-        if (noteButton && noteButton.dataset.noteId) {
-          loadNoteBody(noteButton.dataset.noteId);
+        if (commentsButton && commentsButton.dataset.rowIndex) {
+          showRecordDetails(commentsButton.dataset.rowIndex);
         }
       });
 
