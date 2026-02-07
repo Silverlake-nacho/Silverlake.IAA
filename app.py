@@ -368,6 +368,23 @@ def describe_date_range(filter_type: str, start_date: date, end_date: date) -> s
     return f"{label} ({range_text})"
 
 
+
+
+def serialize_detail_rows(detail_rows):
+    serialized_rows = []
+    for row in detail_rows or []:
+        serialized_row = []
+        for value in row:
+            if value is None:
+                serialized_row.append("")
+            elif isinstance(value, (datetime, date)):
+                serialized_row.append(value.strftime("%Y-%m-%d %H:%M:%S"))
+            else:
+                serialized_row.append(value)
+        serialized_rows.append(serialized_row)
+    return serialized_rows
+
+
 def build_vehicle_stats_context(
     filter_type: str,
     start_date_str: Optional[str],
@@ -415,7 +432,7 @@ def build_vehicle_stats_context(
         "chart_values": chart_values,
         "database_name": database_name or details_db_name,
         "detail_columns": detail_columns,
-        "detail_rows": detail_rows,
+        "detail_rows": serialize_detail_rows(detail_rows),
         "group_mode": resolved_group_mode,
         "entity_label": entity_label,
         "chart_title_base": chart_title_base,
@@ -610,17 +627,7 @@ def vehicle_stats_data():
         filter_type, start_date_str, end_date_str, group_mode, date_field
     )
 
-    detail_rows = []
-    for row in context.get("detail_rows", []):
-        serialized_row = []
-        for value in row:
-            if value is None:
-                serialized_row.append("")
-            elif isinstance(value, (datetime, date)):
-                serialized_row.append(value.strftime("%Y-%m-%d %H:%M:%S"))
-            else:
-                serialized_row.append(value)
-        detail_rows.append(serialized_row)
+    detail_rows = context.get("detail_rows", [])
 
     return jsonify(
         {
