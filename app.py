@@ -430,87 +430,73 @@ def get_atlas_vehicle_notes(vehicle_id: int):
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
-            note_relationships = resolve_vehicle_note_relationships(cur)
-            vehicle_fk = note_relationships.get("vehicle_fk")
-            if not vehicle_fk:
-                cur.close()
-                conn.close()
-                return []
 
-            available_note_columns = set(note_relationships.get("notes_columns", []))
-            selected_columns = ["Id"]
-            for candidate in [
-                "DateEntered",
-                "DateCreated",
-                "DateUpdated",
-                "CreatedOn",
-                "CreatedBy",
-                "UserId",
-                "Title",
-                "Subject",
-            ]:
-                if candidate in available_note_columns and candidate not in selected_columns:
-                    selected_columns.append(candidate)
+            notes = None
+            for vehicle_fk in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"]:
+                try:
+                    cur.execute(
+                        f"""
+                        SELECT TOP (100) vn.Id
+                        FROM CT_VehicleNotes vn
+                        WHERE vn.{vehicle_fk} = ?
+                        ORDER BY vn.Id DESC
+                        """,
+                        (vehicle_id,),
+                    )
+                    rows = cur.fetchall()
+                    notes = [{"Id": row[0]} for row in rows]
+                    break
+                except Exception:
+                    notes = None
 
-            selected_sql = ", ".join(f"vn.{column}" for column in selected_columns)
-            query = f"""
-                SELECT {selected_sql}
-                FROM CT_VehicleNotes vn
-                WHERE vn.{vehicle_fk} = ?
-                ORDER BY vn.Id DESC
-            """
-            cur.execute(query, (vehicle_id,))
-            rows = cur.fetchall()
-            results = []
-            for row in rows:
-                item = {}
-                for idx, column in enumerate(selected_columns):
-                    value = row[idx]
-                    if isinstance(value, (datetime, date)):
-                        value = value.strftime("%Y-%m-%d %H:%M:%S")
-                    item[column] = value
-                results.append(item)
             cur.close()
             conn.close()
-            return results
+
+            if notes is not None:
+                return notes
         except Exception as exc:
             last_error = exc
-    raise last_error if last_error else RuntimeError("No Atlas database names configured.")
+
+    if last_error:
+        return []
+    return []
 
 
 def get_atlas_vehicle_note_body(note_id: int):
-    last_error = None
+    fk_candidates = ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId", "Id"]
+    body_text_candidates = ["Body", "NoteBody", "Comment", "Contents", "Value", "Text"]
+
     for database_name in _get_atlas_db_name_candidates():
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
-            note_relationships = resolve_vehicle_note_relationships(cur)
-            body_fk = note_relationships.get("body_fk")
-            body_text_column = note_relationships.get("body_text_column")
-            if not body_fk:
-                cur.close()
-                conn.close()
-                return {"content": ""}
 
-            select_clause = (
-                f"vnb.{body_text_column} AS BodyText" if body_text_column else "'' AS BodyText"
-            )
-            query = f"""
-                SELECT TOP (1) {select_clause}
-                FROM CT_VehicleNoteBodies vnb
-                WHERE vnb.{body_fk} = ?
-                ORDER BY vnb.Id DESC
-            """
-            cur.execute(query, (note_id,))
-            row = cur.fetchone()
+            for body_fk in fk_candidates:
+                for body_text_column in body_text_candidates:
+                    try:
+                        cur.execute(
+                            f"""
+                            SELECT TOP (1) vnb.{body_text_column}
+                            FROM CT_VehicleNoteBodies vnb
+                            WHERE vnb.{body_fk} = ?
+                            ORDER BY vnb.Id DESC
+                            """,
+                            (note_id,),
+                        )
+                        row = cur.fetchone()
+                        if row is not None:
+                            cur.close()
+                            conn.close()
+                            return {"content": row[0] or ""}
+                    except Exception:
+                        continue
+
             cur.close()
             conn.close()
-            if not row:
-                return {"content": ""}
-            return {"content": row[0] or ""}
-        except Exception as exc:
-            last_error = exc
-    raise last_error if last_error else RuntimeError("No Atlas database names configured.")
+        except Exception:
+            continue
+
+    return {"content": ""}
 
 
 @app.context_processor
