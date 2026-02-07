@@ -605,14 +605,8 @@
         });
       }
 
-      
-      function formatNoteSummary(note) {
-        const dateValue = note.DateEntered || note.DateCreated || note.DateUpdated || note.CreatedOn || '';
-        const userValue = note.CreatedBy || note.UserId || '';
-        const titleValue = note.Title || note.Subject || '';
-        return [note.Id ? `#${note.Id}` : '', dateValue, userValue, titleValue]
-          .filter(Boolean)
-          .join(' | ');
+     function formatNoteCellValue(value) {
+        return value ?? '';
       }
 
       async function loadVehicleNotes(vehicleId) {
