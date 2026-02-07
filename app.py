@@ -117,26 +117,6 @@ def fetch_table_columns(cursor, table_name: str) -> List[str]:
     return [row[0] for row in cursor.fetchall()]
 
 
-def fetch_fk_column(cursor, table_name: str, referenced_table: str) -> Optional[str]:
-    cursor.execute(
-        """
-        SELECT kcu.COLUMN_NAME
-        FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
-        INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-            ON rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
-        INNER JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE ccu
-            ON rc.UNIQUE_CONSTRAINT_NAME = ccu.CONSTRAINT_NAME
-        WHERE kcu.TABLE_SCHEMA = 'dbo'
-          AND kcu.TABLE_NAME = ?
-          AND ccu.TABLE_SCHEMA = 'dbo'
-          AND ccu.TABLE_NAME = ?
-        """,
-        (table_name, referenced_table),
-    )
-    row = cursor.fetchone()
-    return row[0] if row else None
-
-
 def resolve_vehicle_note_relationships(cursor):
     table_columns = {
         "CT_VehicleNotes": fetch_table_columns(cursor, "CT_VehicleNotes"),
@@ -145,18 +125,18 @@ def resolve_vehicle_note_relationships(cursor):
     notes_set = set(table_columns["CT_VehicleNotes"])
     bodies_set = set(table_columns["CT_VehicleNoteBodies"])
 
-    vehicle_fk = fetch_fk_column(cursor, "CT_VehicleNotes", "CT_Vehicles") or next(
+    vehicle_fk = next(
         (
             candidate
-            for candidate in ["CtVehicleId", "VehicleId", "CTVehicleId"]
+            for candidate in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"]
             if candidate in notes_set
         ),
         None,
     )
-    body_fk = fetch_fk_column(cursor, "CT_VehicleNoteBodies", "CT_VehicleNotes") or next(
+    body_fk = next(
         (
             candidate
-            for candidate in ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId"]
+            for candidate in ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId", "Id"]
             if candidate in bodies_set
         ),
         None,
@@ -450,9 +430,11 @@ def get_atlas_vehicle_notes(vehicle_id: int):
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
 
-            note_relationships = resolve_vehicle_note_relationships(cur)
-            available_columns = set(note_relationships["notes_columns"])
-            vehicle_fk = note_relationships.get("vehicle_fk")
+            available_columns = set(fetch_table_columns(cur, "CT_VehicleNotes"))
+            vehicle_fk = next(
+                (candidate for candidate in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"] if candidate in available_columns),
+                None,
+            )
             if not vehicle_fk:
                 cur.close()
                 conn.close()
@@ -476,11 +458,6 @@ def get_atlas_vehicle_notes(vehicle_id: int):
             """
             cur.execute(query, (vehicle_id,))
             rows = cur.fetchall()
-            if not rows:
-                cur.close()
-                conn.close()
-                continue
-
             notes = []
             for row in rows:
                 notes.append(
@@ -503,18 +480,13 @@ def get_atlas_vehicle_notes(vehicle_id: int):
 
 
 def get_atlas_vehicle_note_body(note_id: int):
+    fk_candidates = ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId", "Id"]
     body_text_candidates = ["Body", "NoteBody", "Comment", "Contents", "Value", "Text"]
 
     for database_name in _get_atlas_db_name_candidates():
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
-            note_relationships = resolve_vehicle_note_relationships(cur)
-            fk_candidates = [note_relationships.get("body_fk")] if note_relationships.get("body_fk") else []
-
-            for fallback_fk in ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId"]:
-                if fallback_fk not in fk_candidates:
-                    fk_candidates.append(fallback_fk)
 
             for body_fk in fk_candidates:
                 for body_text_column in body_text_candidates:
