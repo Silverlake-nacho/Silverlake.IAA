@@ -476,6 +476,11 @@ def get_atlas_vehicle_notes(vehicle_id: int):
             """
             cur.execute(query, (vehicle_id,))
             rows = cur.fetchall()
+            if not rows:
+                cur.close()
+                conn.close()
+                continue
+
             notes = []
             for row in rows:
                 notes.append(
