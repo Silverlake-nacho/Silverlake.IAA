@@ -425,40 +425,57 @@ def build_vehicle_stats_context(
 
 
 def get_atlas_vehicle_notes(vehicle_id: int):
-    last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
 
-            notes = None
-            for vehicle_fk in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"]:
-                try:
-                    cur.execute(
-                        f"""
-                        SELECT TOP (100) vn.Id
-                        FROM CT_VehicleNotes vn
-                        WHERE vn.{vehicle_fk} = ?
-                        ORDER BY vn.Id DESC
-                        """,
-                        (vehicle_id,),
-                    )
-                    rows = cur.fetchall()
-                    notes = [{"Id": row[0]} for row in rows]
-                    break
-                except Exception:
-                    notes = None
+            available_columns = set(fetch_table_columns(cur, "CT_VehicleNotes"))
+            vehicle_fk = next(
+                (candidate for candidate in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"] if candidate in available_columns),
+                None,
+            )
+            if not vehicle_fk:
+                cur.close()
+                conn.close()
+                continue
+
+            def column_or_null(column_name: str, alias: str) -> str:
+                if column_name in available_columns:
+                    return f"vn.{column_name} AS [{alias}]"
+                return f"NULL AS [{alias}]"
+
+            query = f"""
+                SELECT TOP (100)
+                    vn.Id AS [NoteNo],
+                    {column_or_null('Subject', 'Subject')},
+                    {column_or_null('UserName', 'CreatedBy')},
+                    {column_or_null('IsSendToWeb', 'SendToCustomerPortal')},
+                    {column_or_null('DateCreated', 'DateCreated')}
+                FROM CT_VehicleNotes vn
+                WHERE vn.{vehicle_fk} = ?
+                ORDER BY vn.Id DESC
+            """
+            cur.execute(query, (vehicle_id,))
+            rows = cur.fetchall()
+            notes = []
+            for row in rows:
+                notes.append(
+                    {
+                        "NoteNo": row[0],
+                        "Subject": row[1] or "",
+                        "CreatedBy": row[2] or "",
+                        "SendToCustomerPortal": row[3] if row[3] is not None else "",
+                        "DateCreated": row[4].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row[4], (datetime, date)) else (row[4] or ""),
+                    }
+                )
 
             cur.close()
             conn.close()
+            return notes
+        except Exception:
+            continue
 
-            if notes is not None:
-                return notes
-        except Exception as exc:
-            last_error = exc
-
-    if last_error:
-        return []
     return []
 
 
