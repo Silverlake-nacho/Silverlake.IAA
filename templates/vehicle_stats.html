@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
   <head>
@@ -201,12 +200,16 @@
       .has-comments-btn:hover {
         color: #0a58ca;
       }
-      .note-select-btn {
+      .note-row-btn {
         border: 0;
-        background: none;
-        color: #0d6efd;
-        text-decoration: underline;
-        padding: 0;
+        width: 100%;
+        text-align: left;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .note-row-btn:hover {
+        background: #e9ecef;
       }
 
       @media (max-width: 768px) {
@@ -385,7 +388,7 @@
         </div>
       </div>
     </div>
-    <div class="modal fade" id="vehicleNotesModal" tabindex="-1" aria-labelledby="vehicleNotesModalLabel" aria-hidden="true">
+        <div class="modal fade" id="vehicleNotesModal" tabindex="-1" aria-labelledby="vehicleNotesModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
@@ -393,20 +396,7 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div class="table-responsive">
-              <table class="table table-sm table-striped align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>ID (Note No)</th>
-                    <th>Subject (Subject)</th>
-                    <th>UserName (Created by)</th>
-                    <th>IsSendToWeb (Send to Customer Portal)</th>
-                    <th>DateCreated (Date Created)</th>
-                  </tr>
-                </thead>
-                <tbody id="vehicleNotesList"></tbody>
-              </table>
-            </div>
+            <div id="vehicleNotesList" class="d-grid gap-2"></div>
           </div>
         </div>
       </div>
@@ -599,47 +589,6 @@
           vehicleDetailsTableBody.appendChild(tr);
         });
       }
-      async function loadVehicleNotes(vehicleId) {
-        vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">Loading comments...</td></tr>';
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
-        try {
-          const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
-          if (!response.ok) throw new Error('Unable to load notes');
-          const data = await response.json();
-          const notes = data.notes || [];
-          if (!notes.length) {
-            vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">No comments found for this vehicle.</td></tr>';
-            return;
-          }
-          vehicleNotesList.innerHTML = '';
-          notes.forEach((note) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td><button type="button" class="note-select-btn" data-note-id="${note.NoteNo}">${note.NoteNo ?? ''}</button></td>
-              <td>${note.Subject ?? ''}</td>
-              <td>${note.CreatedBy ?? ''}</td>
-              <td>${note.SendToCustomerPortal ?? ''}</td>
-              <td>${note.DateCreated ?? ''}</td>
-            `;
-            vehicleNotesList.appendChild(tr);
-          });
-        } catch (err) {
-          vehicleNotesList.innerHTML = `<tr><td colspan="5" class="text-danger">${err.message}</td></tr>`;
-        }
-      }
-
-      async function loadNoteBody(noteId) {
-        noteBodyContent.textContent = 'Loading comment body...';
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('noteBodyModal')).show();
-        try {
-          const response = await fetch(`/vehicle_note_body/${noteId}`, { cache: 'no-store' });
-          if (!response.ok) throw new Error('Unable to load comment body');
-          const data = await response.json();
-          noteBodyContent.textContent = data.content || '(No body text)';
-        } catch (err) {
-          noteBodyContent.textContent = err.message;
-        }
-      }
 
       
       function formatNoteSummary(note) {
@@ -802,7 +751,7 @@
           loadVehicleNotes(commentsButton.dataset.vehicleId);
           return;
         }
-        const noteButton = event.target.closest('.note-select-btn');
+        const noteButton = event.target.closest('.note-row-btn');
         if (noteButton && noteButton.dataset.noteId) {
           loadNoteBody(noteButton.dataset.noteId);
         }
