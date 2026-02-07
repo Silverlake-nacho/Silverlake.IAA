@@ -396,7 +396,22 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div id="vehicleNotesList" class="d-grid gap-2"></div>
+            <div class="table-responsive">
+              <table class="table table-striped table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Id</th>
+                    <th>Subject</th>
+                    <th>UserName</th>
+                    <th>DateCreated</th>
+                    <th>IsSendToWeb</th>
+                  </tr>
+                </thead>
+                <tbody id="vehicleNotesList">
+                  <tr><td colspan="5" class="text-muted">Select a vehicle comment to load data.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -601,7 +616,7 @@
       }
 
       async function loadVehicleNotes(vehicleId) {
-        vehicleNotesList.innerHTML = '<div class="text-muted">Loading comments...</div>';
+        vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
           const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
@@ -609,20 +624,42 @@
           const data = await response.json();
           const notes = data.notes || [];
           if (!notes.length) {
-            vehicleNotesList.innerHTML = '<div class="text-muted">No comments found for this vehicle.</div>';
+            vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">No comments found for this vehicle.</td></tr>';
             return;
           }
           vehicleNotesList.innerHTML = '';
           notes.forEach((note) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'note-row-btn';
-            button.dataset.noteId = note.Id;
-            button.textContent = formatNoteSummary(note);
-            vehicleNotesList.appendChild(button);
+            const tr = document.createElement('tr');
+
+            const idTd = document.createElement('td');
+            const idButton = document.createElement('button');
+            idButton.type = 'button';
+            idButton.className = 'note-row-btn btn btn-link btn-sm p-0';
+            idButton.dataset.noteId = note.Id;
+            idButton.textContent = formatNoteCellValue(note.Id);
+            idTd.appendChild(idButton);
+            tr.appendChild(idTd);
+
+            const subjectTd = document.createElement('td');
+            subjectTd.textContent = formatNoteCellValue(note.Subject);
+            tr.appendChild(subjectTd);
+
+            const userNameTd = document.createElement('td');
+            userNameTd.textContent = formatNoteCellValue(note.UserName);
+            tr.appendChild(userNameTd);
+
+            const dateCreatedTd = document.createElement('td');
+            dateCreatedTd.textContent = formatNoteCellValue(note.DateCreated);
+            tr.appendChild(dateCreatedTd);
+
+            const isSendToWebTd = document.createElement('td');
+            isSendToWebTd.textContent = formatNoteCellValue(note.IsSendToWeb);
+            tr.appendChild(isSendToWebTd);
+
+            vehicleNotesList.appendChild(tr);
           });
         } catch (err) {
-          vehicleNotesList.innerHTML = `<div class="text-danger">${err.message}</div>`;
+          vehicleNotesList.innerHTML = `<tr><td colspan="5" class="text-danger">${err.message}</td></tr>`;
         }
       }
 
