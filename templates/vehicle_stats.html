@@ -278,7 +278,7 @@
                     <button type="submit" class="btn btn-sm btn-primary">Custom</button>
                   </form>
                   {% if group_mode == 'branch' %}
-                       <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='company', date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Insurance</a>
+                       <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='status', date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Status</a>
                   {% else %}
                        <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='branch', date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Branch</a>
                   {% endif %}
