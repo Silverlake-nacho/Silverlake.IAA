@@ -211,6 +211,25 @@
       .note-row-btn:hover {
         background: #e9ecef;
       }
+      
+      .vehicle-details-table thead th {
+        position: sticky;
+        background-color: #fff;
+        z-index: 2;
+      }
+      .vehicle-details-table thead tr:first-child th {
+        top: 0;
+      }
+      .vehicle-details-table thead tr.filter-row th {
+        top: 41px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+      }
+      .vehicle-details-filter {
+        width: 100%;
+        min-width: 110px;
+        font-size: 0.8rem;
+      }
 
       @media (max-width: 768px) {
         :root {
@@ -359,11 +378,24 @@
                   <small class="text-muted">Matches the selected date range for cross-referencing counts.</small>
                 </div>
                 <div class="table-responsive" style="max-height: 60vh;">
-                  <table class="table table-striped table-sm align-middle">
+                   <table class="table table-striped table-sm align-middle vehicle-details-table" id="vehicleDetailsTable">
                     <thead>
                       <tr>
                         {% for column in detail_columns %}
                           <th>{{ column }}</th>
+                        {% endfor %}
+                      </tr>
+                      <tr class="filter-row">
+                        {% for column in detail_columns %}
+                          <th>
+                            <input
+                              type="text"
+                              class="form-control form-control-sm vehicle-details-filter"
+                              data-column-index="{{ loop.index0 }}"
+                              placeholder="Filter"
+                              aria-label="Filter {{ column }}"
+                            >
+                          </th>
                         {% endfor %}
                       </tr>
                     </thead>
@@ -459,6 +491,8 @@
         customEndDate.addEventListener('focus', syncCustomEndDate);
       }
       const vehicleDetailsTableBody = document.getElementById('vehicleDetailsTableBody');
+      const vehicleDetailsTable = document.getElementById('vehicleDetailsTable');
+      const detailFilterInputs = Array.from(document.querySelectorAll('.vehicle-details-filter'));
       const chartTitleBase = {{ chart_title_base|tojson }};
 
       let chartInstance = null;
@@ -602,6 +636,21 @@
             tr.appendChild(td);
           });
           vehicleDetailsTableBody.appendChild(tr);
+        });
+        applyDetailFilters();
+      }
+
+      function applyDetailFilters() {
+        if (!vehicleDetailsTableBody) return;
+        const activeFilters = detailFilterInputs.map((input) => (input.value || '').trim().toLowerCase());
+        Array.from(vehicleDetailsTableBody.querySelectorAll('tr')).forEach((row) => {
+          const cells = Array.from(row.children);
+          const isMatch = activeFilters.every((filterValue, index) => {
+            if (!filterValue) return true;
+            const cellValue = (cells[index]?.textContent || '').trim().toLowerCase();
+            return cellValue.includes(filterValue);
+          });
+          row.style.display = isMatch ? '' : 'none';
         });
       }
 
@@ -756,7 +805,14 @@
           }
         });
       }
-
+      
+      if (vehicleDetailsTable && detailFilterInputs.length) {
+        detailFilterInputs.forEach((input) => {
+          input.addEventListener('input', applyDetailFilters);
+        });
+        applyDetailFilters();
+      }
+      
       if (toggleChartBtn) {
         toggleChartBtn.addEventListener('click', () => {
           currentChartType = currentChartType === 'bar' ? 'pie' : 'bar';
