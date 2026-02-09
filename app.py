@@ -468,10 +468,10 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                     cur.execute(
                         f"""
                         SELECT TOP (100)
-                            vn.Id,
-                            vn.Subject,
-                            vn.UserName AS [User Name],
-                            CAST(vn.DateCreated AS datetime2) AS [Date Created]
+                            vn.Id AS [Id],
+                            vn.Subject AS [Subject],
+                            vn.UserName AS [UserName],
+                            CAST(vn.DateCreated AS datetime2) AS [DateCreated]
                         FROM CT_VehicleNotes vn
                         WHERE vn.{vehicle_fk} = ?
                           AND ISNULL(vn.IsSendToWeb, 0) = 0
