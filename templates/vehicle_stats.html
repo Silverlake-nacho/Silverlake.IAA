@@ -442,7 +442,7 @@
                   </tr>
                 </thead>
                 <tbody id="vehicleNotesList">
-                  <tr><td colspan="4" class="text-muted">Select a vehicle comment to load data.</td></tr>
+                  <tr><td colspan="5" class="text-muted">Select a vehicle comment to load data.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -671,7 +671,7 @@
       }
 
       async function loadVehicleNotes(vehicleId) {
-        vehicleNotesList.innerHTML = '<tr><td colspan="4" class="text-muted">Loading comments...</td></tr>';
+        vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
           const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
@@ -679,7 +679,7 @@
           const data = await response.json();
           const notes = data.notes || [];
           if (!notes.length) {
-            vehicleNotesList.innerHTML = '<tr><td colspan="4" class="text-muted">No comments found for this vehicle.</td></tr>';
+            vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">No comments found for this vehicle.</td></tr>';
             return;
           }
           vehicleNotesList.innerHTML = '';
@@ -707,10 +707,14 @@
             dateCreatedTd.textContent = formatNoteCellValue(note.DateCreated);
             tr.appendChild(dateCreatedTd);
 
+            const isSendToWebTd = document.createElement('td');
+            isSendToWebTd.textContent = formatNoteCellValue(note.IsSendToWeb);
+            tr.appendChild(isSendToWebTd);
+
             vehicleNotesList.appendChild(tr);
           });
         } catch (err) {
-          vehicleNotesList.innerHTML = `<tr><td colspan="4" class="text-danger">${err.message}</td></tr>`;
+          vehicleNotesList.innerHTML = `<tr><td colspan="5" class="text-danger">${err.message}</td></tr>`;
         }
       }
 
