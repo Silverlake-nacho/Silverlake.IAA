@@ -481,15 +481,13 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                     )
                     rows = cur.fetchall()
                     notes = []
-                    column_names = [column[0] for column in cur.description]
                     for row in rows:
-                        row_data = dict(zip(column_names, row))
-                        date_created = row_data.get("DateCreated")
+                        date_created = row[3]
                         notes.append(
                             {
-                                "Id": row_data.get("Id"),
-                                "Subject": row_data.get("Subject"),
-                                "UserName": row_data.get("UserName"),
+                                "Id": row[0],
+                                "Subject": row[1],
+                                "UserName": row[2],
                                 "DateCreated": (
                                     date_created.strftime("%Y-%m-%d %H:%M:%S")
                                     if isinstance(date_created, datetime)
