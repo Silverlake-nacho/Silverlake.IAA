@@ -664,7 +664,8 @@
         const rowHeight = Math.ceil(titleRow.getBoundingClientRect().height || 0);
         if (!Number.isFinite(rowHeight) || rowHeight <= 0) return;
         vehicleDetailsTable.style.setProperty('--vehicle-details-header-row-height', `${rowHeight}px`);
-        );
+      }
+
      function formatNoteCellValue(value) {
         return value ?? '';
       }
