@@ -277,25 +277,23 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                     TOP ({detail_limit})
                     v.Id,
                     v.RegNo AS Registration,
-                    CAST(v.DateEntered AS datetime2) AS DateEntered,
+                    CAST(v.DateEntered AS datetime2) AS [Date Entered],
+                    stc.Name AS Status,
+                    {has_comments_expression},
                     m.Name AS Manufacturer,
                     mg.Name AS Model,
                     dd.TrimLevel,
-                    col.Name AS colour,
+                    col.Name AS [Colour],
                     dm.Name AS Derivative,
                     ib.Name AS InsuranceBranch,
                     ic.Name AS InsuranceCompany,
                     c.Code AS Category_Code,
                     c.Name AS Category,
-                    CAST(v.DateRecoveredStart AS datetime2) AS [Date Recovered START],
-                    CAST(v.DateRecoveredEnd AS datetime2) AS [Date Recovered END],
                     CAST(sr.DateRecovered AS datetime2) AS [Date Recovered],
-                    CAST(sc.DateCleared AS datetime2) AS DateCleared,
-                    CAST(scn.DateCancelled AS datetime2) AS DateCancelled,
-                    CAST(ss.DateSold AS datetime2) AS DateSold,
-                    ss.IncVAT AS Sold_price,
-                    stc.Name AS Status,
-                    {has_comments_expression}
+                    CAST(sc.DateCleared AS datetime2) AS [Date Cleared],
+                    CAST(scn.DateCancelled AS datetime2) AS [Date Cancelled],
+                    ss.IncVAT AS Sold_price
+
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
                 LEFT JOIN PartDataManufacturers m ON v.ManufacturerId = m.Id
