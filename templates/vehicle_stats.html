@@ -221,7 +221,7 @@
         top: 0;
       }
       .vehicle-details-table thead tr.filter-row th {
-        top: 41px;
+        top: var(--vehicle-details-header-row-height, 0px);
         padding-top: 6px;
         padding-bottom: 6px;
       }
@@ -229,7 +229,7 @@
         width: 100%;
         min-width: 110px;
         font-size: 0.8rem;
-      }
+     
 
       @media (max-width: 768px) {
         :root {
@@ -638,6 +638,7 @@
           vehicleDetailsTableBody.appendChild(tr);
         });
         applyDetailFilters();
+        syncVehicleDetailsStickyOffsets();
       }
 
       function applyDetailFilters() {
@@ -654,6 +655,14 @@
         });
       }
 
+      function syncVehicleDetailsStickyOffsets() {
+        if (!vehicleDetailsTable) return;
+        const titleRow = vehicleDetailsTable.querySelector('thead tr:first-child');
+        if (!titleRow) return;
+        vehicleDetailsTable.style.setProperty(
+          '--vehicle-details-header-row-height',
+          `${Math.ceil(titleRow.getBoundingClientRect().height)}px`
+        );
      function formatNoteCellValue(value) {
         return value ?? '';
       }
@@ -806,11 +815,17 @@
         });
       }
       
+      if (vehicleDetailsTable) {
+        syncVehicleDetailsStickyOffsets();
+        window.addEventListener('resize', syncVehicleDetailsStickyOffsets);
+      }
+
       if (vehicleDetailsTable && detailFilterInputs.length) {
         detailFilterInputs.forEach((input) => {
           input.addEventListener('input', applyDetailFilters);
         });
         applyDetailFilters();
+        syncVehicleDetailsStickyOffsets();
       }
       
       if (toggleChartBtn) {
@@ -851,6 +866,7 @@
       }
 
       renderChart(currentChartType);
+      syncVehicleDetailsStickyOffsets();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   </body>
