@@ -470,7 +470,9 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                         SELECT TOP (100)
                             vn.Id,
                             vn.Subject,
-                            CAST(vn.DateCreated AS datetime2) AS DateCreated
+                            vn.UserName,
+                            CAST(vn.DateCreated AS datetime2) AS DateCreated,
+                            vn.IsSendToWeb
                         FROM CT_VehicleNotes vn
                         WHERE vn.{vehicle_fk} = ?
                           AND ISNULL(vn.IsSendToWeb, 0) = 0
