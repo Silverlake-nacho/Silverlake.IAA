@@ -268,7 +268,7 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
             note_relationships = resolve_vehicle_note_relationships(cur)
             vehicle_fk = note_relationships.get("vehicle_fk")
             has_comments_expression = (
-                f"CASE WHEN EXISTS (SELECT 1 FROM CT_VehicleNotes vn WHERE vn.{vehicle_fk} = v.Id) THEN 'YES' ELSE 'NO' END AS HasComments"
+                  f"CASE WHEN EXISTS (SELECT 1 FROM CT_VehicleNotes vn WHERE vn.{vehicle_fk} = v.Id AND ISNULL(vn.IsSendToWeb, 0) = 0) THEN 'YES' ELSE 'NO' END AS HasComments"
                 if vehicle_fk
                 else "'NO' AS HasComments"
             )
@@ -475,6 +475,7 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                             vn.IsSendToWeb
                         FROM CT_VehicleNotes vn
                         WHERE vn.{vehicle_fk} = ?
+                          AND ISNULL(vn.IsSendToWeb, 0) = 0
                         ORDER BY vn.Id DESC
                         """,
                         (vehicle_id,),
