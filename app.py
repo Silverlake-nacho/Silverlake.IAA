@@ -268,7 +268,7 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
             note_relationships = resolve_vehicle_note_relationships(cur)
             vehicle_fk = note_relationships.get("vehicle_fk")
             has_comments_expression = (
-                  f"CASE WHEN EXISTS (SELECT 1 FROM CT_VehicleNotes vn WHERE vn.{vehicle_fk} = v.Id AND ISNULL(vn.IsSendToWeb, 0) = 0) THEN 'YES' ELSE 'NO' END AS HasComments"
+                f"CASE WHEN EXISTS (SELECT 1 FROM CT_VehicleNotes vn WHERE vn.{vehicle_fk} = v.Id) THEN 'YES' ELSE 'NO' END AS HasComments"
                 if vehicle_fk
                 else "'NO' AS HasComments"
             )
@@ -277,23 +277,25 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                     TOP ({detail_limit})
                     v.Id,
                     v.RegNo AS Registration,
-                    CAST(v.DateEntered AS datetime2) AS [Date Entered],
-                    stc.Name AS Status,
-                    {has_comments_expression},
+                    CAST(v.DateEntered AS datetime2) AS DateEntered,
                     m.Name AS Manufacturer,
                     mg.Name AS Model,
                     dd.TrimLevel,
-                    col.Name AS [Colour],
+                    col.Name AS colour,
                     dm.Name AS Derivative,
                     ib.Name AS InsuranceBranch,
                     ic.Name AS InsuranceCompany,
                     c.Code AS Category_Code,
                     c.Name AS Category,
+                    CAST(v.DateRecoveredStart AS datetime2) AS [Date Recovered START],
+                    CAST(v.DateRecoveredEnd AS datetime2) AS [Date Recovered END],
                     CAST(sr.DateRecovered AS datetime2) AS [Date Recovered],
-                    CAST(sc.DateCleared AS datetime2) AS [Date Cleared],
-                    CAST(scn.DateCancelled AS datetime2) AS [Date Cancelled],
-                    ss.IncVAT AS Sold_price
-
+                    CAST(sc.DateCleared AS datetime2) AS DateCleared,
+                    CAST(scn.DateCancelled AS datetime2) AS DateCancelled,
+                    CAST(ss.DateSold AS datetime2) AS DateSold,
+                    ss.IncVAT AS Sold_price,
+                    stc.Name AS Status,
+                    {has_comments_expression}
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
                 LEFT JOIN PartDataManufacturers m ON v.ManufacturerId = m.Id
@@ -470,11 +472,11 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                         SELECT TOP (100)
                             vn.Id,
                             vn.Subject,
-                            vn.UserName AS [User Name],
-                            CAST(vn.DateCreated AS datetime2) AS [Date Created]
+                            vn.UserName,
+                            CAST(vn.DateCreated AS datetime2) AS DateCreated,
+                            vn.IsSendToWeb
                         FROM CT_VehicleNotes vn
                         WHERE vn.{vehicle_fk} = ?
-                          AND ISNULL(vn.IsSendToWeb, 0) = 0
                         ORDER BY vn.Id DESC
                         """,
                         (vehicle_id,),
