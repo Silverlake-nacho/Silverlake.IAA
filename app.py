@@ -275,7 +275,6 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
             query = f"""
                 SELECT
                     TOP ({detail_limit})
-                    v.GroupRef AS [IAA Id],
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
                     CAST(v.DateEntered AS datetime2) AS DateEntered,
