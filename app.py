@@ -55,8 +55,8 @@ DATE_FIELD_CONFIG = {
 
 
 def resolve_date_field(date_field: str):
-    return DATE_FIELD_CONFIG.get(date_field, DATE_FIELD_CONFIG["recovered"]), (
-        date_field if date_field in DATE_FIELD_CONFIG else "recovered"
+    return DATE_FIELD_CONFIG.get(date_field, DATE_FIELD_CONFIG["entered"]), (
+        date_field if date_field in DATE_FIELD_CONFIG else "entered"
     )
 
 def _get_atlas_db_name_candidates() -> List[str]:
@@ -603,7 +603,7 @@ def vehicle_stats():
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
     group_mode = request.args.get("group", "status")
-    date_field = request.args.get("date_field", "recovered")
+    date_field = request.args.get("date_field", "entered")
     live_enabled = str(request.args.get("live", "")).lower() in {"1", "true", "yes", "on"}
 
     error_message = None
@@ -631,8 +631,8 @@ def vehicle_stats():
             "group_mode": group_mode,
             "entity_label": entity_label,
             "chart_title_base": f"Vehicles by {entity_label}",
-            "date_field": "recovered",
-            "date_field_label": DATE_FIELD_CONFIG["recovered"]["label"],
+            "date_field": "entered",
+            "date_field_label": DATE_FIELD_CONFIG["entered"]["label"],
         }
 
     if last_error is not None:
@@ -653,7 +653,7 @@ def vehicle_stats_data():
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
     group_mode = request.args.get("group", "status")
-    date_field = request.args.get("date_field", "recovered")
+    date_field = request.args.get("date_field", "entered")
     
     context = build_vehicle_stats_context(
         filter_type, start_date_str, end_date_str, group_mode, date_field
@@ -686,9 +686,9 @@ def vehicle_stats_data():
             "chart_title_base": context.get(
                 "chart_title_base", "Vehicles by Status"
             ),
-             "date_field": context.get("date_field", "recovered"),
+             "date_field": context.get("date_field", "entered"),
             "date_field_label": context.get(
-                "date_field_label", DATE_FIELD_CONFIG["recovered"]["label"]
+                "date_field_label", DATE_FIELD_CONFIG["entered"]["label"]
             ),
         }
     )
