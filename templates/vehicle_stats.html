@@ -232,10 +232,16 @@
         min-width: 110px;
         font-size: 0.8rem;
       }
-
+      .vehicle-search-controls {
+        min-width: 320px;
+      }
       @media (max-width: 768px) {
         :root {
           --sidebar-expanded: 220px;
+        }
+        .vehicle-search-controls {
+        width: 100%;
+        min-width: 0;
         }
       }
     </style>
@@ -370,46 +376,86 @@
             <div class="card shadow-sm">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                  <h5 class="card-title mb-0">Vehicle Details</h5>
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h5 class="card-title mb-0">Vehicle Details</h5>
+                    <ul class="nav nav-tabs border-0" id="vehicleDetailsTabs" role="tablist">
+                      <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="vehicle-details-tab" data-bs-toggle="tab" data-bs-target="#vehicle-details-pane" type="button" role="tab" aria-controls="vehicle-details-pane" aria-selected="true">Vehicle Details</button>
+                      </li>
+                      <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="vehicle-search-tab" data-bs-toggle="tab" data-bs-target="#vehicle-search-pane" type="button" role="tab" aria-controls="vehicle-search-pane" aria-selected="false">Search</button>
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="vehicle-search-controls d-none align-items-center gap-2" id="vehicleSearchControls">
+                    <select class="form-select form-select-sm" id="vehicleSearchField" aria-label="Vehicle search field">
+                      <option value="IAA Id" selected>IAA Id</option>
+                      <option value="SLK Id">SLK Id</option>
+                      <option value="Registration">Registration</option>
+                    </select>
+                    <input type="text" class="form-control form-control-sm" id="vehicleSearchInput" placeholder="Search" aria-label="Search vehicle details">
+                  </div>
                   <small class="text-muted">Matches the selected date range for cross-referencing counts.</small>
                 </div>
-                <div class="table-responsive" style="max-height: 60vh;">
-                   <table class="table table-striped table-sm align-middle vehicle-details-table" id="vehicleDetailsTable">
-                    <thead>
-                      <tr>
-                        {% for column in detail_columns %}
-                          <th>{{ column }}</th>
-                        {% endfor %}
-                      </tr>
-                      <tr class="filter-row">
-                        {% for column in detail_columns %}
-                          <th>
-                            <input
-                              type="text"
-                              class="form-control form-control-sm vehicle-details-filter"
-                              data-column-index="{{ loop.index0 }}"
-                              placeholder="Filter"
-                              aria-label="Filter {{ column }}"
-                            >
-                          </th>
-                        {% endfor %}
-                      </tr>
-                    </thead>
-                    <tbody id="vehicleDetailsTableBody">
-                      {% for row in detail_rows %}
-                        {% set slk_id_index = detail_columns.index('SLK Id') if 'SLK Id' in detail_columns else 0 %}
-                        <tr>
-                          {% for value in row %}
-                            {% if detail_columns[loop.index0] == 'HasComments' and value == 'YES' %}
-                              <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
-                            {% else %}
-                              <td>{{ value }}</td>
-                            {% endif %}
+                <div class="tab-content">
+                  <div class="tab-pane fade show active" id="vehicle-details-pane" role="tabpanel" aria-labelledby="vehicle-details-tab" tabindex="0">
+                    <div class="table-responsive" style="max-height: 60vh;">
+                      <table class="table table-striped table-sm align-middle vehicle-details-table" id="vehicleDetailsTable">
+                        <thead>
+                          <tr>
+                            {% for column in detail_columns %}
+                              <th>{{ column }}</th>
+                            {% endfor %}
+                          </tr>
+                          <tr class="filter-row">
+                            {% for column in detail_columns %}
+                              <th>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm vehicle-details-filter"
+                                  data-column-index="{{ loop.index0 }}"
+                                  placeholder="Filter"
+                                  aria-label="Filter {{ column }}"
+                                >
+                              </th>
+                            {% endfor %}
+                          </tr>
+                        </thead>
+                        <tbody id="vehicleDetailsTableBody">
+                          {% for row in detail_rows %}
+                            {% set slk_id_index = detail_columns.index('SLK Id') if 'SLK Id' in detail_columns else 0 %}
+                            <tr>
+                              {% for value in row %}
+                                {% if detail_columns[loop.index0] == 'HasComments' and value == 'YES' %}
+                                  <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
+                                {% else %}
+                                  <td>{{ value }}</td>
+                                {% endif %}
+                              {% endfor %}
+                            </tr>
                           {% endfor %}
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="tab-pane fade" id="vehicle-search-pane" role="tabpanel" aria-labelledby="vehicle-search-tab" tabindex="0">
+                    <div class="table-responsive" style="max-height: 60vh;">
+                      <table class="table table-striped table-sm align-middle vehicle-details-table" id="vehicleSearchTable">
+                        <thead>
+                          <tr>
+                            {% for column in detail_columns %}
+                              <th>{{ column }}</th>
+                            {% endfor %}
+                          </tr>
+                        </thead>
+                        <tbody id="vehicleSearchTableBody">
+                          <tr>
+                            <td colspan="{{ detail_columns|length }}" class="text-muted">Enter a search value to view results.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -473,6 +519,7 @@
       const vehicleNotesList = document.getElementById('vehicleNotesList');
       const noteBodyContent = document.getElementById('noteBodyContent');
       let detailColumnNames = {{ detail_columns|tojson }};
+      let currentDetailRows = {{ detail_rows|tojson }};
 
       function syncCustomEndDate() {
         if (!customStartDate || !customEndDate) return;
@@ -487,6 +534,12 @@
       }
       const vehicleDetailsTableBody = document.getElementById('vehicleDetailsTableBody');
       const vehicleDetailsTable = document.getElementById('vehicleDetailsTable');
+      const vehicleSearchTableBody = document.getElementById('vehicleSearchTableBody');
+      const vehicleSearchField = document.getElementById('vehicleSearchField');
+      const vehicleSearchInput = document.getElementById('vehicleSearchInput');
+      const vehicleSearchControls = document.getElementById('vehicleSearchControls');
+      const vehicleSearchTab = document.getElementById('vehicle-search-tab');
+      const vehicleDetailsTab = document.getElementById('vehicle-details-tab');
       const detailFilterInputs = Array.from(document.querySelectorAll('.vehicle-details-filter'));
       const chartTitleBase = {{ chart_title_base|tojson }};
 
@@ -619,7 +672,7 @@
         detailColumnNames = data.detail_columns || detailColumnNames || [];
         const commentsIndex = detailColumnNames.indexOf('HasComments');
         const slkIdIndex = detailColumnNames.indexOf('SLK Id');
-        const detailRows = data.detail_rows || [];
+        const detailRows = currentDetailRows;
         detailRows.forEach((row) => {
           const tr = document.createElement('tr');
           row.forEach((value, index) => {
@@ -639,7 +692,57 @@
           vehicleDetailsTableBody.appendChild(tr);
         });
         applyDetailFilters();
+        renderSearchResults();
         syncVehicleDetailsStickyOffsets();
+      }
+
+      function getSelectedSearchColumnIndex() {
+        const fieldName = vehicleSearchField?.value || 'IAA Id';
+        return detailColumnNames.indexOf(fieldName);
+      }
+
+      function renderSearchResults() {
+        if (!vehicleSearchTableBody) return;
+        vehicleSearchTableBody.innerHTML = '';
+        const query = (vehicleSearchInput?.value || '').trim().toLowerCase();
+        if (!query) {
+          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">Enter a search value to view results.</td></tr>`;
+          return;
+        }
+
+        const searchIndex = getSelectedSearchColumnIndex();
+        if (searchIndex < 0) {
+          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">Selected search column was not found.</td></tr>`;
+          return;
+        }
+
+        const commentsIndex = detailColumnNames.indexOf('HasComments');
+        const slkIdIndex = detailColumnNames.indexOf('SLK Id');
+        const filteredRows = currentDetailRows.filter((row) => String(row?.[searchIndex] ?? '').toLowerCase().includes(query));
+
+        if (!filteredRows.length) {
+          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">No records match your search.</td></tr>`;
+          return;
+        }
+
+        filteredRows.forEach((row) => {
+          const tr = document.createElement('tr');
+          row.forEach((value, index) => {
+            const td = document.createElement('td');
+            if (index === commentsIndex && value === 'YES') {
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.className = 'has-comments-btn';
+              button.dataset.vehicleId = slkIdIndex >= 0 ? row[slkIdIndex] : row[0];
+              button.textContent = 'YES';
+              td.appendChild(button);
+            } else {
+              td.textContent = value ?? '';
+            }
+            tr.appendChild(td);
+          });
+          vehicleSearchTableBody.appendChild(tr);
+        });
       }
 
       function applyDetailFilters() {
@@ -657,12 +760,14 @@
       }
 
       function syncVehicleDetailsStickyOffsets() {
-        if (!vehicleDetailsTable || !vehicleDetailsTable.style) return;
-        const titleRow = vehicleDetailsTable.querySelector('thead tr:first-child');
-        if (!titleRow) return;
-        const rowHeight = Math.ceil(titleRow.getBoundingClientRect().height || 0);
-        if (!Number.isFinite(rowHeight) || rowHeight <= 0) return;
-        vehicleDetailsTable.style.setProperty('--vehicle-details-header-row-height', `${rowHeight}px`);
+        document.querySelectorAll('.vehicle-details-table').forEach((table) => {
+          if (!table || !table.style) return;
+          const titleRow = table.querySelector('thead tr:first-child');
+          if (!titleRow) return;
+          const rowHeight = Math.ceil(titleRow.getBoundingClientRect().height || 0);
+          if (!Number.isFinite(rowHeight) || rowHeight <= 0) return;
+          table.style.setProperty('--vehicle-details-header-row-height', `${rowHeight}px`);
+        });
       }
 
       function formatNoteCellValue(value) {
@@ -852,6 +957,29 @@
         });
         applyDetailFilters();
         syncVehicleDetailsStickyOffsets();
+      }
+
+      if (vehicleSearchField && vehicleSearchInput) {
+        vehicleSearchField.addEventListener('change', renderSearchResults);
+        vehicleSearchInput.addEventListener('input', renderSearchResults);
+      }
+
+      if (vehicleSearchTab && vehicleSearchControls) {
+        vehicleSearchTab.addEventListener('shown.bs.tab', () => {
+          vehicleSearchControls.classList.remove('d-none');
+          vehicleSearchControls.classList.add('d-flex');
+          renderSearchResults();
+          syncVehicleDetailsStickyOffsets();
+          vehicleSearchInput?.focus();
+        });
+      }
+
+      if (vehicleDetailsTab && vehicleSearchControls) {
+        vehicleDetailsTab.addEventListener('shown.bs.tab', () => {
+          vehicleSearchControls.classList.remove('d-flex');
+          vehicleSearchControls.classList.add('d-none');
+          syncVehicleDetailsStickyOffsets();
+        });
       }
       
       if (toggleChartBtn) {
