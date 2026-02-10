@@ -675,27 +675,24 @@ def vehicle_stats_data():
         filter_type, start_date_str, end_date_str, group_mode, date_field
     )
 
-    return jsonify(
-        {
-            "date_range_label": context["date_range_label"],
-            "rows": [
-                {"label": row[0], "total": float(row[1])} for row in context["rows"]
-            ],
-            "sum_total": context["sum_total"],
-            "chart_labels": context["chart_labels"],
-            "chart_values": context["chart_values"],
-            "detail_columns": context.get("detail_columns", []),
-            "detail_rows": context.get("detail_rows", [])
-            "entity_label": context.get("entity_label", "Status"),
-            "chart_title_base": context.get(
-                "chart_title_base", "Vehicles by Status"
-            ),
-             "date_field": context.get("date_field", "entered"),
-            "date_field_label": context.get(
-                "date_field_label", DATE_FIELD_CONFIG["entered"]["label"]
-            ),
-        }
-    )
+    payload = {
+        "date_range_label": context["date_range_label"],
+        "rows": [
+            {"label": row[0], "total": float(row[1])} for row in context["rows"]
+        ],
+        "sum_total": context["sum_total"],
+        "chart_labels": context["chart_labels"],
+        "chart_values": context["chart_values"],
+        "detail_columns": context.get("detail_columns", []),
+        "detail_rows": context.get("detail_rows", []),
+        "entity_label": context.get("entity_label", "Status"),
+        "chart_title_base": context.get("chart_title_base", "Vehicles by Status"),
+        "date_field": context.get("date_field", "entered"),
+        "date_field_label": context.get(
+            "date_field_label", DATE_FIELD_CONFIG["entered"]["label"]
+        ),
+    }
+    return jsonify(payload)
 
 
 @app.route("/vehicle_notes/<int:vehicle_id>", methods=["GET"])
