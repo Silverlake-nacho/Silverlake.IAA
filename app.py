@@ -232,31 +232,31 @@ def fetch_atlas_vehicle_counts_by_status(start_date: date, end_date: date, date_
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
             query = f"""
+                WITH VehicleStatusRows AS (
+                    SELECT
+                        CASE
+                            WHEN stc.Name IS NOT NULL THEN stc.Name
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM IAACompletes iaac
+                                WHERE iaac.CtVehicleId = v.Id
+                            ) THEN 'IAAComplete'
+                            ELSE 'Unknown'
+                        END AS Status
+                    FROM CT_Vehicles v
+                    LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
+                    INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
+                    INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
+                    LEFT JOIN StatusColors stc ON v.StatusEnum = stc.Id
+                    WHERE {date_expression} >= ?
+                      AND {date_expression} < ?
+                      AND ic.Name = ?
+                )
                 SELECT
-                    CASE
-                        WHEN stc.Name IS NOT NULL THEN stc.Name
-                        WHEN iaac.CtVehicleId IS NOT NULL THEN 'IAAComplete'
-                        ELSE 'Unknown'
-                    END AS Status,
+                    Status,
                     COUNT(*) AS VehicleCount
-                FROM CT_Vehicles v
-                LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
-                INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
-                INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
-                LEFT JOIN StatusColors stc ON v.StatusEnum = stc.Id
-                LEFT JOIN (
-                    SELECT DISTINCT CtVehicleId
-                    FROM IAACompletes
-                ) iaac ON iaac.CtVehicleId = v.Id
-                WHERE {date_expression} >= ?
-                  AND {date_expression} < ?
-                  AND ic.Name = ?
-                GROUP BY
-                    CASE
-                        WHEN stc.Name IS NOT NULL THEN stc.Name
-                        WHEN iaac.CtVehicleId IS NOT NULL THEN 'IAAComplete'
-                        ELSE 'Unknown'
-                    END
+                FROM VehicleStatusRows
+                GROUP BY Status
                 ORDER BY VehicleCount DESC, Status
             """
             cur.execute(query, (start_date, end_date, IAA_INSURANCE_COMPANY_NAME))
