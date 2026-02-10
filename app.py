@@ -336,6 +336,85 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
     raise last_error if last_error else RuntimeError("No Atlas database names configured.")
 
 
+def fetch_atlas_vehicle_search_by_insurance(search_field: str, search_query: str):
+    detail_limit = max(1, min(ATLAS_DETAIL_LIMIT, 5000))
+    search_column_map = {
+        "IAA Id": "CAST(v.GroupRef AS nvarchar(255))",
+        "SLK Id": "CAST(v.Id AS nvarchar(255))",
+        "Registration": "CAST(v.RegNo AS nvarchar(255))",
+    }
+    search_column = search_column_map.get(search_field, search_column_map["IAA Id"])
+    query_value = f"%{search_query}%"
+
+    last_error = None
+    for database_name in _get_atlas_db_name_candidates():
+        try:
+            conn = get_atlas_db_connection(database_name)
+            cur = conn.cursor()
+            note_relationships = resolve_vehicle_note_relationships(cur)
+            vehicle_fk = note_relationships.get("vehicle_fk")
+            has_comments_expression = (
+                f"CASE WHEN EXISTS (SELECT 1 FROM CT_VehicleNotes vn WHERE vn.{vehicle_fk} = v.Id AND ISNULL(vn.IsSendToWeb, 0) = 0) THEN 'YES' ELSE 'NO' END AS HasComments"
+                if vehicle_fk
+                else "'NO' AS HasComments"
+            )
+            query = f"""
+                SELECT
+                    TOP ({detail_limit})
+                    v.GroupRef AS [IAA Id],
+                    v.Id AS [SLK Id],
+                    v.RegNo AS Registration,
+                    CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
+                    stc.Name AS Status,
+                    {has_comments_expression},
+                    m.Name AS Manufacturer,
+                    mg.Name AS Model,
+                    dd.TrimLevel,
+                    col.Name AS [Colour],
+                    ib.Name AS InsuranceBranch,
+                    ic.Name AS InsuranceCompany,
+                    c.Code AS Category_Code,
+                    c.Name AS Category,
+                    CASE WHEN sr.DateRecovered IS NULL THEN '' ELSE CONVERT(varchar(10), sr.DateRecovered, 105) + ' ' + CONVERT(varchar(8), sr.DateRecovered, 108) END AS [Date Recovered],
+                    CASE WHEN sc.DateCleared IS NULL THEN '' ELSE CONVERT(varchar(10), sc.DateCleared, 105) + ' ' + CONVERT(varchar(8), sc.DateCleared, 108) END AS [Date Cleared],
+                    CASE WHEN scn.DateCancelled IS NULL THEN '' ELSE CONVERT(varchar(10), scn.DateCancelled, 105) + ' ' + CONVERT(varchar(8), scn.DateCancelled, 108) END AS [Date Cancelled]
+                FROM CT_Vehicles v
+                LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
+                LEFT JOIN PartDataManufacturers m ON v.ManufacturerId = m.Id
+                LEFT JOIN PartDataModelGroups mg ON v.ModelGroupId = mg.Id
+                LEFT JOIN PartDataDerivativeDetails dd ON v.DerivativeId = dd.Id
+                INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
+                INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
+                LEFT JOIN Categories c ON v.CategoryId = c.Id
+                OUTER APPLY (
+                    SELECT TOP (1) sc.DateCleared
+                    FROM SalvageClears sc
+                    WHERE sc.CtVehicleId = v.Id
+                    ORDER BY sc.DateCleared DESC
+                ) sc
+                OUTER APPLY (
+                    SELECT TOP (1) scn.DateCancelled
+                    FROM SalvagesCancelled scn
+                    WHERE scn.CtVehicleId = v.Id
+                    ORDER BY scn.DateCancelled DESC
+                ) scn
+                LEFT JOIN PartDataColours col ON v.ColourId = col.Id
+                LEFT JOIN StatusColors stc ON v.StatusEnum = stc.Id
+                WHERE ic.Name = ?
+                  AND {search_column} LIKE ?
+                ORDER BY v.Id DESC
+            """
+            cur.execute(query, (IAA_INSURANCE_COMPANY_NAME, query_value))
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            cur.close()
+            conn.close()
+            return database_name, columns, rows
+        except Exception as exc:
+            last_error = exc
+    raise last_error if last_error else RuntimeError("No Atlas database names configured.")
+
+
 def parse_date_filter(
     filter_type: str, start_date_str: Optional[str] = None, end_date_str: Optional[str] = None
 ) -> Tuple[date, date]:
@@ -411,6 +490,21 @@ def serialize_detail_rows(rows) -> List[List[object]]:
     return serialized_rows
 
 
+def serialize_detail_rows(rows) -> List[List[object]]:
+    serialized_rows: List[List[object]] = []
+    for row in rows:
+        serialized_row = []
+        for value in row:
+            if value is None:
+                serialized_row.append("")
+            elif isinstance(value, (datetime, date)):
+                serialized_row.append(value.strftime("%Y-%m-%d %H:%M:%S"))
+            else:
+                serialized_row.append(value)
+        serialized_rows.append(serialized_row)
+    return serialized_rows
+
+
 def build_vehicle_stats_context(
     filter_type: str,
     start_date_str: Optional[str],
@@ -465,6 +559,7 @@ def build_vehicle_stats_context(
         "chart_title_base": chart_title_base,
         "date_field": resolved_date_field,
         "date_field_label": date_field_config["label"],
+        "insurance_company_name": IAA_INSURANCE_COMPANY_NAME,
     }
 
 
@@ -649,6 +744,7 @@ def vehicle_stats():
             "chart_title_base": f"Vehicles by {entity_label}",
             "date_field": "entered",
             "date_field_label": DATE_FIELD_CONFIG["entered"]["label"],
+            "insurance_company_name": IAA_INSURANCE_COMPANY_NAME,
         }
 
     if last_error is not None:
@@ -693,6 +789,26 @@ def vehicle_stats_data():
         ),
     }
     return jsonify(payload)
+
+
+@app.route("/vehicle_stats/search", methods=["GET"])
+def vehicle_stats_search():
+    search_field = request.args.get("field", "IAA Id")
+    search_query = (request.args.get("q") or "").strip()
+
+    if not search_query:
+        return jsonify({"detail_columns": [], "detail_rows": []})
+
+    _, detail_columns, detail_rows = fetch_atlas_vehicle_search_by_insurance(
+        search_field, search_query
+    )
+
+    return jsonify(
+        {
+            "detail_columns": detail_columns,
+            "detail_rows": serialize_detail_rows(detail_rows),
+        }
+    )
 
 
 @app.route("/vehicle_notes/<int:vehicle_id>", methods=["GET"])
