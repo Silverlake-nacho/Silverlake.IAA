@@ -403,10 +403,11 @@
                     </thead>
                     <tbody id="vehicleDetailsTableBody">
                       {% for row in detail_rows %}
+                        {% set slk_id_index = detail_columns.index('SLK Id') if 'SLK Id' in detail_columns else 0 %}
                         <tr>
                           {% for value in row %}
                             {% if detail_columns[loop.index0] == 'HasComments' and value == 'YES' %}
-                              <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[0] }}">YES</button></td>
+                              <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
                             {% else %}
                               <td>{{ value }}</td>
                             {% endif %}
@@ -620,6 +621,7 @@
         vehicleDetailsTableBody.innerHTML = '';
         detailColumnNames = data.detail_columns || detailColumnNames || [];
         const commentsIndex = detailColumnNames.indexOf('HasComments');
+        const slkIdIndex = detailColumnNames.indexOf('SLK Id');
         const detailRows = data.detail_rows || [];
         detailRows.forEach((row) => {
           const tr = document.createElement('tr');
@@ -629,7 +631,7 @@
               const button = document.createElement('button');
               button.type = 'button';
               button.className = 'has-comments-btn';
-              button.dataset.vehicleId = row[0];
+              button.dataset.vehicleId = slkIdIndex >= 0 ? row[slkIdIndex] : row[0];
               button.textContent = 'YES';
               td.appendChild(button);
             } else {
