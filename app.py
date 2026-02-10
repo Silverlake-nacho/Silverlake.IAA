@@ -275,7 +275,7 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
             query = f"""
                 SELECT
                     TOP ({detail_limit})
-                    v.GroupRef AS [IAA Id],
+                    COALESCE(NULLIF(LTRIM(RTRIM(CAST(v.GroupRef AS nvarchar(255)))), ''), CAST(v.ClaimNo AS nvarchar(255)), '') AS [IAA Id],
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
                     CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
@@ -338,8 +338,9 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
 
 def fetch_atlas_vehicle_search_by_insurance(search_field: str, search_query: str):
     detail_limit = max(1, min(ATLAS_DETAIL_LIMIT, 5000))
+    iaa_id_expression = "COALESCE(NULLIF(LTRIM(RTRIM(CAST(v.GroupRef AS nvarchar(255)))), ''), CAST(v.ClaimNo AS nvarchar(255)), '')"
     search_column_map = {
-        "IAA Id": "CAST(v.GroupRef AS nvarchar(255))",
+        "IAA Id": iaa_id_expression,
         "SLK Id": "CAST(v.Id AS nvarchar(255))",
         "Registration": "CAST(v.RegNo AS nvarchar(255))",
     }
@@ -361,7 +362,7 @@ def fetch_atlas_vehicle_search_by_insurance(search_field: str, search_query: str
             query = f"""
                 SELECT
                     TOP ({detail_limit})
-                    v.GroupRef AS [IAA Id],
+                    {iaa_id_expression} AS [IAA Id],
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
                     CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
