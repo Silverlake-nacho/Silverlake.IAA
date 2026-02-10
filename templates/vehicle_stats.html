@@ -437,13 +437,11 @@
                   <tr>
                     <th>Id</th>
                     <th>Subject</th>
-                    <th>UserName</th>
                     <th>DateCreated</th>
-                    <th>IsSendToWeb</th>
                   </tr>
                 </thead>
                 <tbody id="vehicleNotesList">
-                  <tr><td colspan="5" class="text-muted">Select a vehicle comment to load data.</td></tr>
+                  <tr><td colspan="3" class="text-muted">Select a vehicle comment to load data.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -668,12 +666,37 @@
         vehicleDetailsTable.style.setProperty('--vehicle-details-header-row-height', `${rowHeight}px`);
       }
 
-     function formatNoteCellValue(value) {
+      function formatNoteCellValue(value) {
         return value ?? '';
       }
 
+            function formatVehicleNoteDate(value) {
+        if (!value) return '';
+        const normalizedValue = String(value).trim();
+
+        const directMatch = normalizedValue.match(
+          /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/
+        );
+        if (directMatch) {
+          const [, year, month, day, hours, minutes, seconds] = directMatch;
+          return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+        }
+
+        const parsed = new Date(normalizedValue);
+        if (Number.isNaN(parsed.getTime())) return normalizedValue;
+
+        const day = String(parsed.getDate()).padStart(2, '0');
+        const month = String(parsed.getMonth() + 1).padStart(2, '0');
+        const year = parsed.getFullYear();
+        const hours = String(parsed.getHours()).padStart(2, '0');
+        const minutes = String(parsed.getMinutes()).padStart(2, '0');
+        const seconds = String(parsed.getSeconds()).padStart(2, '0');
+
+        return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+      }
+
       async function loadVehicleNotes(vehicleId) {
-        vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">Loading comments...</td></tr>';
+        vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
           const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
@@ -681,7 +704,7 @@
           const data = await response.json();
           const notes = data.notes || [];
           if (!notes.length) {
-            vehicleNotesList.innerHTML = '<tr><td colspan="5" class="text-muted">No comments found for this vehicle.</td></tr>';
+            vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">No comments found for this vehicle.</td></tr>';
             return;
           }
           vehicleNotesList.innerHTML = '';
@@ -701,22 +724,14 @@
             subjectTd.textContent = formatNoteCellValue(note.Subject);
             tr.appendChild(subjectTd);
 
-            const userNameTd = document.createElement('td');
-            userNameTd.textContent = formatNoteCellValue(note.UserName);
-            tr.appendChild(userNameTd);
-
             const dateCreatedTd = document.createElement('td');
-            dateCreatedTd.textContent = formatNoteCellValue(note.DateCreated);
+            dateCreatedTd.textContent = formatVehicleNoteDate(note.DateCreated);
             tr.appendChild(dateCreatedTd);
-
-            const isSendToWebTd = document.createElement('td');
-            isSendToWebTd.textContent = formatNoteCellValue(note.IsSendToWeb);
-            tr.appendChild(isSendToWebTd);
 
             vehicleNotesList.appendChild(tr);
           });
         } catch (err) {
-          vehicleNotesList.innerHTML = `<tr><td colspan="5" class="text-danger">${err.message}</td></tr>`;
+          vehicleNotesList.innerHTML = `<tr><td colspan="3" class="text-danger">${err.message}</td></tr>`;
         }
       }
 
