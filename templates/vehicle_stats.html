@@ -395,8 +395,7 @@
                     </select>
                     <input type="text" class="form-control form-control-sm" id="vehicleSearchInput" placeholder="Search" aria-label="Search vehicle details">
                   </div>
-                  <small class="text-muted">Matches the selected date range for cross-referencing counts.</small>
-                </div>
+                  <small class="text-muted">Searches all vehicles in {{ insurance_company_name }} regardless of selected date range.</small>
                 <div class="tab-content">
                   <div class="tab-pane fade show active" id="vehicle-details-pane" role="tabpanel" aria-labelledby="vehicle-details-tab" tabindex="0">
                     <div class="table-responsive" style="max-height: 60vh;">
@@ -537,6 +536,7 @@
       const vehicleSearchTableBody = document.getElementById('vehicleSearchTableBody');
       const vehicleSearchField = document.getElementById('vehicleSearchField');
       const vehicleSearchInput = document.getElementById('vehicleSearchInput');
+      const vehicleSearchButton = document.getElementById('vehicleSearchButton');
       const vehicleSearchControls = document.getElementById('vehicleSearchControls');
       const vehicleSearchTab = document.getElementById('vehicle-search-tab');
       const vehicleDetailsTab = document.getElementById('vehicle-details-tab');
@@ -672,6 +672,7 @@
         detailColumnNames = data.detail_columns || detailColumnNames || [];
         const commentsIndex = detailColumnNames.indexOf('HasComments');
         const slkIdIndex = detailColumnNames.indexOf('SLK Id');
+        currentDetailRows = data.detail_rows || [];
         const detailRows = currentDetailRows;
         detailRows.forEach((row) => {
           const tr = document.createElement('tr');
@@ -692,40 +693,23 @@
           vehicleDetailsTableBody.appendChild(tr);
         });
         applyDetailFilters();
-        renderSearchResults();
+        showSearchPlaceholder('Enter a search value and click Search.');
         syncVehicleDetailsStickyOffsets();
       }
 
-      function getSelectedSearchColumnIndex() {
-        const fieldName = vehicleSearchField?.value || 'IAA Id';
-        return detailColumnNames.indexOf(fieldName);
-      }
-
-      function renderSearchResults() {
+function renderSearchResults(rows) {
         if (!vehicleSearchTableBody) return;
         vehicleSearchTableBody.innerHTML = '';
-        const query = (vehicleSearchInput?.value || '').trim().toLowerCase();
-        if (!query) {
-          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">Enter a search value to view results.</td></tr>`;
-          return;
-        }
 
-        const searchIndex = getSelectedSearchColumnIndex();
-        if (searchIndex < 0) {
-          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">Selected search column was not found.</td></tr>`;
+        if (!rows.length) {
+          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">No records match your search.</td></tr>`;
           return;
         }
 
         const commentsIndex = detailColumnNames.indexOf('HasComments');
         const slkIdIndex = detailColumnNames.indexOf('SLK Id');
-        const filteredRows = currentDetailRows.filter((row) => String(row?.[searchIndex] ?? '').toLowerCase().includes(query));
 
-        if (!filteredRows.length) {
-          vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">No records match your search.</td></tr>`;
-          return;
-        }
-
-        filteredRows.forEach((row) => {
+        rows.forEach((row) => {
           const tr = document.createElement('tr');
           row.forEach((value, index) => {
             const td = document.createElement('td');
@@ -743,6 +727,41 @@
           });
           vehicleSearchTableBody.appendChild(tr);
         });
+      }
+
+      function showSearchPlaceholder(message) {
+        if (!vehicleSearchTableBody) return;
+        vehicleSearchTableBody.innerHTML = `<tr><td colspan="${Math.max(detailColumnNames.length, 1)}" class="text-muted">${message}</td></tr>`;
+      }
+
+      async function runVehicleSearch() {
+        const query = (vehicleSearchInput?.value || '').trim();
+        if (!query) {
+          showSearchPlaceholder('Enter a search value to view results.');
+          return;
+        }
+
+        const field = vehicleSearchField?.value || 'IAA Id';
+        showSearchPlaceholder('Searching...');
+
+        try {
+          const url = new URL("{{ url_for('vehicle_stats_search') }}", window.location.origin);
+          url.searchParams.set('field', field);
+          url.searchParams.set('q', query);
+
+          const response = await fetch(url.toString(), { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error('Unable to search vehicles');
+          }
+
+          const data = await response.json();
+          if (Array.isArray(data.detail_columns) && data.detail_columns.length) {
+            detailColumnNames = data.detail_columns;
+          }
+          renderSearchResults(Array.isArray(data.detail_rows) ? data.detail_rows : []);
+        } catch (err) {
+          showSearchPlaceholder(err.message || 'Unable to search vehicles.');
+        }
       }
 
       function applyDetailFilters() {
@@ -960,15 +979,26 @@
       }
 
       if (vehicleSearchField && vehicleSearchInput) {
-        vehicleSearchField.addEventListener('change', renderSearchResults);
-        vehicleSearchInput.addEventListener('input', renderSearchResults);
+        vehicleSearchField.addEventListener('change', () => {
+          showSearchPlaceholder('Enter a search value and click Search.');
+        });
+        vehicleSearchInput.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            runVehicleSearch();
+          }
+        });
+      }
+
+      if (vehicleSearchButton) {
+        vehicleSearchButton.addEventListener('click', runVehicleSearch);
       }
 
       if (vehicleSearchTab && vehicleSearchControls) {
         vehicleSearchTab.addEventListener('shown.bs.tab', () => {
           vehicleSearchControls.classList.remove('d-none');
           vehicleSearchControls.classList.add('d-flex');
-          renderSearchResults();
+          showSearchPlaceholder('Enter a search value and click Search.');
           syncVehicleDetailsStickyOffsets();
           vehicleSearchInput?.focus();
         });
