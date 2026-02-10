@@ -235,11 +235,7 @@ def fetch_atlas_vehicle_counts_by_status(start_date: date, end_date: date, date_
                 SELECT
                     CASE
                         WHEN stc.Name IS NOT NULL THEN stc.Name
-                        WHEN EXISTS (
-                            SELECT 1
-                            FROM IAACompletes iaac
-                            WHERE iaac.CtVehicleId = v.Id
-                        ) THEN 'IAAComplete'
+                        WHEN iaac.CtVehicleId IS NOT NULL THEN 'IAAComplete'
                         ELSE 'Unknown'
                     END AS Status,
                     COUNT(*) AS VehicleCount
@@ -248,17 +244,17 @@ def fetch_atlas_vehicle_counts_by_status(start_date: date, end_date: date, date_
                 INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
                 INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
                 LEFT JOIN StatusColors stc ON v.StatusEnum = stc.Id
+                LEFT JOIN (
+                    SELECT DISTINCT CtVehicleId
+                    FROM IAACompletes
+                ) iaac ON iaac.CtVehicleId = v.Id
                 WHERE {date_expression} >= ?
                   AND {date_expression} < ?
                   AND ic.Name = ?
                 GROUP BY
                     CASE
                         WHEN stc.Name IS NOT NULL THEN stc.Name
-                        WHEN EXISTS (
-                            SELECT 1
-                            FROM IAACompletes iaac
-                            WHERE iaac.CtVehicleId = v.Id
-                        ) THEN 'IAAComplete'
+                        WHEN iaac.CtVehicleId IS NOT NULL THEN 'IAAComplete'
                         ELSE 'Unknown'
                     END
                 ORDER BY VehicleCount DESC, Status
@@ -391,7 +387,7 @@ def fetch_atlas_vehicle_search_by_insurance(search_field: str, search_query: str
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
                     CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
-                    stc.Name AS Status,                    CASE
+                    CASE
                         WHEN stc.Name IS NOT NULL THEN stc.Name
                         WHEN EXISTS (
                             SELECT 1
