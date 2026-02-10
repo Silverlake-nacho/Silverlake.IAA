@@ -278,7 +278,7 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                     v.GroupRef AS [IAA Id],
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
-                    CAST(v.DateEntered AS datetime2) AS DateEntered,
+                    CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
                     stc.Name AS Status,
                     {has_comments_expression},
                     m.Name AS Manufacturer,
@@ -290,17 +290,14 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                     ic.Name AS InsuranceCompany,
                     c.Code AS Category_Code,
                     c.Name AS Category,
-                    CAST(v.DateRecoveredStart AS datetime2) AS [Date Recovered START],
-                    CAST(v.DateRecoveredEnd AS datetime2) AS [Date Recovered END],
-                    CAST(sr.DateRecovered AS datetime2) AS [Date Recovered],
-                    CAST(sc.DateCleared AS datetime2) AS [Date Cleared],
-                    CAST(scn.DateCancelled AS datetime2) AS [Date Cancelled]
+                    CASE WHEN sr.DateRecovered IS NULL THEN '' ELSE CONVERT(varchar(10), sr.DateRecovered, 105) + ' ' + CONVERT(varchar(8), sr.DateRecovered, 108) END AS [Date Recovered],
+                    CASE WHEN sc.DateCleared IS NULL THEN '' ELSE CONVERT(varchar(10), sc.DateCleared, 105) + ' ' + CONVERT(varchar(8), sc.DateCleared, 108) END AS [Date Cleared],
+                    CASE WHEN scn.DateCancelled IS NULL THEN '' ELSE CONVERT(varchar(10), scn.DateCancelled, 105) + ' ' + CONVERT(varchar(8), scn.DateCancelled, 108) END AS [Date Cancelled]
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
                 LEFT JOIN PartDataManufacturers m ON v.ManufacturerId = m.Id
                 LEFT JOIN PartDataModelGroups mg ON v.ModelGroupId = mg.Id
                 LEFT JOIN PartDataDerivativeDetails dd ON v.DerivativeId = dd.Id
-                LEFT JOIN PartDataModels dm ON v.DerivativeId = dm.Id
                 INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
                 INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
                 LEFT JOIN Categories c ON v.CategoryId = c.Id
