@@ -298,6 +298,7 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                 LEFT JOIN PartDataManufacturers m ON v.ManufacturerId = m.Id
                 LEFT JOIN PartDataModelGroups mg ON v.ModelGroupId = mg.Id
                 LEFT JOIN PartDataDerivativeDetails dd ON v.DerivativeId = dd.Id
+                LEFT JOIN PartDataModels dm ON v.DerivativeId = dm.Id
                 INNER JOIN InsuranceBranches ib ON v.InsuranceBranchId = ib.Id
                 INNER JOIN InsuranceCompanies ic ON ib.InsuranceCompanyId = ic.Id
                 LEFT JOIN Categories c ON v.CategoryId = c.Id
