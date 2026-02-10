@@ -233,7 +233,15 @@ def fetch_atlas_vehicle_counts_by_status(start_date: date, end_date: date, date_
             cur = conn.cursor()
             query = f"""
                 SELECT
-                    COALESCE(stc.Name, 'Unknown') AS Status,
+                    CASE
+                        WHEN stc.Name IS NOT NULL THEN stc.Name
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM IAACompletes iaac
+                            WHERE iaac.CtVehicleId = v.Id
+                        ) THEN 'IAAComplete'
+                        ELSE 'Unknown'
+                    END AS Status,
                     COUNT(*) AS VehicleCount
                 FROM CT_Vehicles v
                 LEFT JOIN SalvageRecoveries sr ON v.SalvageRecoveryId = sr.Id
@@ -243,7 +251,16 @@ def fetch_atlas_vehicle_counts_by_status(start_date: date, end_date: date, date_
                 WHERE {date_expression} >= ?
                   AND {date_expression} < ?
                   AND ic.Name = ?
-                GROUP BY COALESCE(stc.Name, 'Unknown')
+                GROUP BY
+                    CASE
+                        WHEN stc.Name IS NOT NULL THEN stc.Name
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM IAACompletes iaac
+                            WHERE iaac.CtVehicleId = v.Id
+                        ) THEN 'IAAComplete'
+                        ELSE 'Unknown'
+                    END
                 ORDER BY VehicleCount DESC, Status
             """
             cur.execute(query, (start_date, end_date, IAA_INSURANCE_COMPANY_NAME))
@@ -279,7 +296,15 @@ def fetch_atlas_vehicle_details_by_insurance(start_date: date, end_date: date, d
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
                     CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
-                    stc.Name AS Status,
+                    CASE
+                        WHEN stc.Name IS NOT NULL THEN stc.Name
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM IAACompletes iaac
+                            WHERE iaac.CtVehicleId = v.Id
+                        ) THEN 'IAAComplete'
+                        ELSE ''
+                    END AS Status,
                     {has_comments_expression},
                     m.Name AS Manufacturer,
                     mg.Name AS Model,
@@ -366,7 +391,15 @@ def fetch_atlas_vehicle_search_by_insurance(search_field: str, search_query: str
                     v.Id AS [SLK Id],
                     v.RegNo AS Registration,
                     CASE WHEN v.DateEntered IS NULL THEN '' ELSE CONVERT(varchar(10), v.DateEntered, 105) + ' ' + CONVERT(varchar(8), v.DateEntered, 108) END AS DateEntered,
-                    stc.Name AS Status,
+                    stc.Name AS Status,                    CASE
+                        WHEN stc.Name IS NOT NULL THEN stc.Name
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM IAACompletes iaac
+                            WHERE iaac.CtVehicleId = v.Id
+                        ) THEN 'IAAComplete'
+                        ELSE ''
+                    END AS Status,
                     {has_comments_expression},
                     m.Name AS Manufacturer,
                     mg.Name AS Model,
