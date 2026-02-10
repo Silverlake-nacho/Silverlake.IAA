@@ -272,21 +272,15 @@
               <div class="alert alert-danger" role="alert">{{ error_message }}</div>
             {% endif %}
 
-            {% if database_name %}
-              <div class="alert alert-info" role="alert">
-                Connected to database: <strong>{{ database_name }}</strong>
-              </div>
-            {% endif %}
-
             <div class="summary-card">
               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div class="d-flex flex-wrap align-items-center gap-2">
-                      <a href="{{ url_for('vehicle_stats', filter='today', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Today</a>
-                      <a href="{{ url_for('vehicle_stats', filter='yesterday', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Yesterday</a>
-                      <a href="{{ url_for('vehicle_stats', filter='this_week', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">This Week</a>
-                      <a href="{{ url_for('vehicle_stats', filter='last_week', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Last Week</a>
-                      <a href="{{ url_for('vehicle_stats', filter='this_month', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">This Month</a>
-                      <a href="{{ url_for('vehicle_stats', filter='last_month', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-primary date-link">Last Month</a>
+                      <a href="{{ url_for('vehicle_stats', filter='today', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-success date-link">Today</a>
+                      <a href="{{ url_for('vehicle_stats', filter='yesterday', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-success date-link">Yesterday</a>
+                      <a href="{{ url_for('vehicle_stats', filter='this_week', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-success date-link">This Week</a>
+                      <a href="{{ url_for('vehicle_stats', filter='last_week', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-success date-link">Last Week</a>
+                      <a href="{{ url_for('vehicle_stats', filter='this_month', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-success date-link">This Month</a>
+                      <a href="{{ url_for('vehicle_stats', filter='last_month', group=group_mode, date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-success date-link">Last Month</a>
                   <form method="get" class="d-inline">
                     <input type="hidden" name="filter" value="custom">
                     <input type="hidden" name="group" value="{{ group_mode }}">
@@ -296,7 +290,7 @@
                     {% if live_enabled %}
                       <input type="hidden" name="live" value="1">
                     {% endif %}
-                    <button type="submit" class="btn btn-sm btn-primary">Custom</button>
+                    <button type="submit" class="btn btn-sm btn-success">Custom</button>
                   </form>
                   {% if group_mode == 'branch' %}
                        <a href="{{ url_for('vehicle_stats', filter=filter_type, start_date=start_date.isoformat() if start_date else None, end_date=end_date.isoformat() if end_date else None, group='status', date_field=date_field, live=1 if live_enabled else None) }}" class="btn btn-sm btn-outline-primary">Group by Status</a>
