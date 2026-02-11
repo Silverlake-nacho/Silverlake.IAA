@@ -589,6 +589,18 @@
       function buildChartConfig(type) {
         const colors = generateColors(labels.length);
         const isPie = type === 'pie';
+        const getChartValue = (context) => {
+          if (typeof context.raw === 'number') {
+            return context.raw;
+          }
+          if (typeof context.parsed === 'number') {
+            return context.parsed;
+          }
+          if (context.parsed && typeof context.parsed.y === 'number') {
+            return context.parsed.y;
+          }
+          return 0;
+        };
         return {
           type,
           data: {
@@ -617,7 +629,7 @@
               },
               tooltip: {
                 callbacks: {
-                  label: (context) => `${context.label}: ${Number(context.parsed).toLocaleString()}`,
+                  label: (context) => `${context.label}: ${getChartValue(context).toLocaleString()}`,
                 },
               },
               datalabels: {
