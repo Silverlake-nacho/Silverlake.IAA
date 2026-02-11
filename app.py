@@ -8,27 +8,23 @@ from flask import (
     url_for,
 )
 from datetime import date, datetime, timedelta
+import json
+from pathlib import Path
+import tempfile
+import threading
 import time
 from typing import List, Optional, Tuple
 import os
 import pyodbc
-
+from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
-USERS = {
-    "admin": "Silverlake1!",
-    "paul": "Silverlake1!",
-    "morgan": "Silverlake1!",
-    "cain": "Silverlake1!",
-    "stores": "stores",
-    "Stores": "stores",
-    "Josh": "Silverlake1!",
-    "Casper": "Silverlake1!",
-    "carlo": "Silverlake1!",
-    "nacho": "Silverlake1!",
-}
+USERS_FILE_PATH = Path(os.getenv("USERS_FILE_PATH", "users.json"))
+DEFAULT_ADMIN_USERNAME = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
+ADMIN_INITIAL_PASSWORD = os.getenv("ADMIN_INITIAL_PASSWORD")
+USER_STORE_LOCK = threading.RLock()
 
 ATLAS_DB_HOST = os.environ["ATLAS_DB_HOST"]
 ATLAS_DB_PORT = int(os.getenv("ATLAS_DB_PORT", "1433"))
@@ -58,6 +54,118 @@ def resolve_date_field(date_field: str):
     return DATE_FIELD_CONFIG.get(date_field, DATE_FIELD_CONFIG["entered"]), (
         date_field if date_field in DATE_FIELD_CONFIG else "entered"
     )
+
+
+
+def _normalize_username(username: str) -> str:
+    return username.strip().lower()
+
+
+def _save_users(user_map: dict) -> None:
+    USERS_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=USERS_FILE_PATH.parent, delete=False
+    ) as tmp_file:
+        json.dump(user_map, tmp_file, indent=2)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        temp_name = tmp_file.name
+    os.replace(temp_name, USERS_FILE_PATH)
+
+
+def load_users() -> dict:
+    with USER_STORE_LOCK:
+        if not USERS_FILE_PATH.exists():
+            if not ADMIN_INITIAL_PASSWORD:
+                raise RuntimeError(
+                    "User store not found. Set ADMIN_INITIAL_PASSWORD to bootstrap the admin account."
+                )
+            users = {
+                _normalize_username(DEFAULT_ADMIN_USERNAME): {
+                    "username": DEFAULT_ADMIN_USERNAME,
+                    "password_hash": generate_password_hash(ADMIN_INITIAL_PASSWORD),
+                    "is_admin": True,
+                }
+            }
+            _save_users(users)
+            return users
+
+        with USERS_FILE_PATH.open("r", encoding="utf-8") as f:
+            loaded = json.load(f)
+
+        users = {}
+        for key, value in loaded.items():
+            username = value.get("username") or key
+            password_hash = value.get("password_hash")
+            if not password_hash:
+                continue
+            normalized = _normalize_username(username)
+            users[normalized] = {
+                "username": username,
+                "password_hash": password_hash,
+                "is_admin": bool(value.get("is_admin", False)),
+            }
+
+        if not users:
+            raise RuntimeError("No valid users found in the user store.")
+        return users
+
+
+def verify_credentials(username: str, password: str) -> bool:
+    users = load_users()
+    user_record = users.get(_normalize_username(username))
+    if not user_record:
+        return False
+    return check_password_hash(user_record["password_hash"], password)
+
+
+def is_admin_user(username: Optional[str]) -> bool:
+    if not username:
+        return False
+    users = load_users()
+    user_record = users.get(_normalize_username(username))
+    return bool(user_record and user_record.get("is_admin"))
+
+
+def upsert_user(username: str, password: Optional[str], is_admin: bool) -> None:
+    normalized = _normalize_username(username)
+    with USER_STORE_LOCK:
+        users = load_users()
+        existing = users.get(normalized)
+        if existing:
+            updated_password_hash = existing["password_hash"]
+            if password:
+                updated_password_hash = generate_password_hash(password)
+            users[normalized] = {
+                "username": username.strip(),
+                "password_hash": updated_password_hash,
+                "is_admin": is_admin,
+            }
+        else:
+            if not password:
+                raise ValueError("Password is required for new users.")
+            users[normalized] = {
+                "username": username.strip(),
+                "password_hash": generate_password_hash(password),
+                "is_admin": is_admin,
+            }
+        _save_users(users)
+
+
+def delete_user(username: str, current_username: str) -> None:
+    normalized = _normalize_username(username)
+    current_normalized = _normalize_username(current_username)
+    with USER_STORE_LOCK:
+        users = load_users()
+        if normalized == current_normalized:
+            raise ValueError("You cannot delete your own account.")
+        record = users.get(normalized)
+        if not record:
+            return
+        if record.get("is_admin") and sum(1 for u in users.values() if u.get("is_admin")) <= 1:
+            raise ValueError("At least one admin user is required.")
+        users.pop(normalized)
+        _save_users(users)
 
 def _get_atlas_db_name_candidates() -> List[str]:
     explicit_names = [name.strip() for name in ATLAS_DB_NAMES.split(",") if name.strip()]
@@ -691,7 +799,11 @@ def get_atlas_vehicle_note_body(note_id: int):
 
 @app.context_processor
 def inject_current_user():
-    return {"current_user": session.get("username")}
+    current_user = session.get("username")
+    return {
+        "current_user": current_user,
+        "current_user_is_admin": is_admin_user(current_user),
+    }
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -701,10 +813,12 @@ def login():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        if username in USERS and USERS[username] == password:
+        if verify_credentials(username, password):
+            users = load_users()
+            record = users[_normalize_username(username)]
             session["logged_in"] = True
             session["login_time"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            session["username"] = username
+            session["username"] = record["username"]
             if next_url:
                 return redirect(next_url)
             return redirect(url_for("vehicle_stats"))
@@ -716,6 +830,43 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/admin/users", methods=["GET", "POST"])
+def manage_users():
+    current_user = session.get("username")
+    if not is_admin_user(current_user):
+        return redirect(url_for("vehicle_stats"))
+
+    message = None
+    error = None
+    if request.method == "POST":
+        action = request.form.get("action", "").strip()
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        make_admin = request.form.get("is_admin") == "on"
+        try:
+            if not username:
+                raise ValueError("Username is required.")
+            if action == "delete":
+                delete_user(username, current_user=current_user)
+                message = f"User '{username}' deleted."
+            elif action in {"add", "update"}:
+                upsert_user(username=username, password=password or None, is_admin=make_admin)
+                message = f"User '{username}' saved."
+            else:
+                raise ValueError("Invalid action.")
+        except Exception as exc:
+            error = str(exc)
+
+    users = sorted(load_users().values(), key=lambda item: item["username"].lower())
+    return render_template(
+        "user_management.html",
+        users=users,
+        success_message=message,
+        error_message=error,
+        active_page="user_management",
+    )
 
 
 @app.before_request
