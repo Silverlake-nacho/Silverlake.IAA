@@ -77,9 +77,7 @@ def load_users() -> dict:
     with USER_STORE_LOCK:
         if not USERS_FILE_PATH.exists():
             if not ADMIN_INITIAL_PASSWORD:
-                raise RuntimeError(
-                    "User store not found. Set ADMIN_INITIAL_PASSWORD to bootstrap the admin account."
-                )
+                return {}
             users = {
                 _normalize_username(DEFAULT_ADMIN_USERNAME): {
                     "username": DEFAULT_ADMIN_USERNAME,
@@ -90,8 +88,11 @@ def load_users() -> dict:
             _save_users(users)
             return users
 
-        with USERS_FILE_PATH.open("r", encoding="utf-8") as f:
-            loaded = json.load(f)
+        try:
+            with USERS_FILE_PATH.open("r", encoding="utf-8") as f:
+                loaded = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
 
         users = {}
         for key, value in loaded.items():
@@ -106,8 +107,6 @@ def load_users() -> dict:
                 "is_admin": bool(value.get("is_admin", False)),
             }
 
-        if not users:
-            raise RuntimeError("No valid users found in the user store.")
         return users
 
 
@@ -116,7 +115,10 @@ def verify_credentials(username: str, password: str) -> bool:
     user_record = users.get(_normalize_username(username))
     if not user_record:
         return False
-    return check_password_hash(user_record["password_hash"], password)
+    try:
+        return check_password_hash(user_record["password_hash"], password)
+    except (ValueError, TypeError):
+        return False
 
 
 def is_admin_user(username: Optional[str]) -> bool:
@@ -125,6 +127,10 @@ def is_admin_user(username: Optional[str]) -> bool:
     users = load_users()
     user_record = users.get(_normalize_username(username))
     return bool(user_record and user_record.get("is_admin"))
+
+
+def user_store_ready() -> bool:
+    return bool(load_users())
 
 
 def upsert_user(username: str, password: Optional[str], is_admin: bool) -> None:
@@ -813,7 +819,9 @@ def login():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        if verify_credentials(username, password):
+        if not user_store_ready():
+            error = "Authentication is not configured. Set ADMIN_INITIAL_PASSWORD and restart the app."
+        elif verify_credentials(username, password):
             users = load_users()
             record = users[_normalize_username(username)]
             session["logged_in"] = True
@@ -822,7 +830,8 @@ def login():
             if next_url:
                 return redirect(next_url)
             return redirect(url_for("vehicle_stats"))
-        error = "Invalid Credentials. Please try again."
+        else:
+            error = "Invalid Credentials. Please try again."
     return render_template("login.html", error=error, next_url=next_url)
 
 
