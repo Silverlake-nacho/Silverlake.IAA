@@ -7,3 +7,5 @@ services:
     envVars:
       - key: PORT
         value: 10000
+      - key: USERS_FILE_PATH
+        value: /var/data/users.json
