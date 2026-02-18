@@ -203,12 +203,17 @@
         border: 0;
         background: none;
         padding: 0;
-        color: #0d6efd;
         text-decoration: underline;
-        font-weight: 600;
+        font-weight: 700;
+      }
+      .has-comments-btn.has-comments-unread {
+        color: #b42318;
+      }
+      .has-comments-btn.has-comments-read {
+        color: #067647;
       }
       .has-comments-btn:hover {
-        color: #0a58ca;
+        opacity: 0.85;
       }
       .note-row-btn {
         border: 0;
@@ -459,7 +464,7 @@
                             <tr>
                               {% for value in row %}
                                 {% if detail_columns[loop.index0] == 'HasComments' and value == 'YES' %}
-                                  <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
+                                  <td><button type="button" class="has-comments-btn has-comments-unread" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
                                 {% else %}
                                   <td>{{ value }}</td>
                                 {% endif %}
@@ -530,7 +535,13 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <pre id="noteBodyContent" class="mb-0" style="white-space: pre-wrap;"></pre>
+            <pre id="noteBodyContent" class="mb-3" style="white-space: pre-wrap;"></pre>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="noteReadToggle">
+              <label class="form-check-label" for="noteReadToggle">
+                Mark this comment as read
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -550,8 +561,11 @@
       const dateFieldLabel = document.getElementById('dateFieldLabel');
       const vehicleNotesList = document.getElementById('vehicleNotesList');
       const noteBodyContent = document.getElementById('noteBodyContent');
+      const noteReadToggle = document.getElementById('noteReadToggle');
       let detailColumnNames = {{ detail_columns|tojson }};
       let currentDetailRows = {{ detail_rows|tojson }};
+      let selectedVehicleId = null;
+      let selectedNoteId = null;
 
       function syncCustomEndDate() {
         if (!customStartDate || !customEndDate) return;
@@ -580,6 +594,41 @@
       let currentChartType = 'bar';
       let labels = chartLabels.slice();
       let values = chartValues.slice();
+
+      function updateHasCommentsButtonState(button, hasUnread) {
+        if (!button) return;
+        button.classList.remove('has-comments-read', 'has-comments-unread');
+        button.classList.add(hasUnread ? 'has-comments-unread' : 'has-comments-read');
+      }
+
+      function updateHasCommentsButtonStateByVehicle(vehicleId, hasUnread) {
+        document.querySelectorAll(`.has-comments-btn[data-vehicle-id="${String(vehicleId)}"]`).forEach((button) => {
+          updateHasCommentsButtonState(button, hasUnread);
+        });
+      }
+
+      async function refreshHasCommentsButtonStates() {
+        const ids = Array.from(document.querySelectorAll('.has-comments-btn[data-vehicle-id]'))
+          .map((button) => (button.dataset.vehicleId || '').trim())
+          .filter((value) => value);
+        const uniqueIds = [...new Set(ids)];
+        if (!uniqueIds.length) return;
+
+        const url = new URL('/vehicle_comment_status', window.location.origin);
+        uniqueIds.forEach((vehicleId) => url.searchParams.append('vehicle_id', vehicleId));
+        try {
+          const response = await fetch(url.toString(), { cache: 'no-store' });
+          if (!response.ok) return;
+          const data = await response.json();
+          const statuses = data.statuses || {};
+          uniqueIds.forEach((vehicleId) => {
+            const status = statuses[String(vehicleId)] || {};
+            updateHasCommentsButtonStateByVehicle(vehicleId, Boolean(status.has_unread));
+          });
+        } catch (err) {
+          console.error('Unable to refresh comment read statuses', err);
+        }
+      }
 
       function generateColors(count) {
         const palette = ['#5c9c13', '#7fbf2e', '#b2d97c', '#2e5e0f', '#3f7f16', '#94c11f'];
@@ -726,7 +775,7 @@
             if (index === commentsIndex && value === 'YES') {
               const button = document.createElement('button');
               button.type = 'button';
-              button.className = 'has-comments-btn';
+              button.className = 'has-comments-btn has-comments-unread';
               button.dataset.vehicleId = slkIdIndex >= 0 ? row[slkIdIndex] : row[0];
               button.textContent = 'YES';
               td.appendChild(button);
@@ -740,6 +789,7 @@
         applyDetailFilters();
         showSearchPlaceholder('Enter a search value and click Search.');
         syncVehicleDetailsStickyOffsets();
+        refreshHasCommentsButtonStates();
       }
 
 function renderSearchResults(rows) {
@@ -761,7 +811,7 @@ function renderSearchResults(rows) {
             if (index === commentsIndex && value === 'YES') {
               const button = document.createElement('button');
               button.type = 'button';
-              button.className = 'has-comments-btn';
+              button.className = 'has-comments-btn has-comments-unread';
               button.dataset.vehicleId = slkIdIndex >= 0 ? row[slkIdIndex] : row[0];
               button.textContent = 'YES';
               td.appendChild(button);
@@ -772,6 +822,7 @@ function renderSearchResults(rows) {
           });
           vehicleSearchTableBody.appendChild(tr);
         });
+        refreshHasCommentsButtonStates();
       }
 
       function showSearchPlaceholder(message) {
@@ -863,7 +914,32 @@ function renderSearchResults(rows) {
         return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
       }
 
+      async function saveNoteReadState(vehicleId, noteId, isRead) {
+        if (!vehicleId || !noteId) return;
+        try {
+          await fetch('/vehicle_note_read_state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vehicle_id: Number(vehicleId),
+              note_id: Number(noteId),
+              is_read: Boolean(isRead),
+            }),
+          });
+        } catch (err) {
+          console.error('Unable to save note read state', err);
+        }
+      }
+
       async function loadVehicleNotes(vehicleId) {
+        selectedVehicleId = vehicleId;
+        selectedNoteId = null;
+        noteBodyContent.textContent = '';
+        if (noteReadToggle) {
+          noteReadToggle.checked = false;
+          noteReadToggle.disabled = true;
+        }
+
         vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
@@ -873,6 +949,7 @@ function renderSearchResults(rows) {
           const notes = data.notes || [];
           if (!notes.length) {
             vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">No comments found for this vehicle.</td></tr>';
+            updateHasCommentsButtonStateByVehicle(vehicleId, false);
             return;
           }
           vehicleNotesList.innerHTML = '';
@@ -884,6 +961,7 @@ function renderSearchResults(rows) {
             idButton.type = 'button';
             idButton.className = 'note-row-btn btn btn-link btn-sm p-0';
             idButton.dataset.noteId = note.Id;
+            idButton.dataset.vehicleId = vehicleId;
             idButton.textContent = formatNoteCellValue(note.Id);
             idTd.appendChild(idButton);
             tr.appendChild(idTd);
@@ -898,19 +976,32 @@ function renderSearchResults(rows) {
 
             vehicleNotesList.appendChild(tr);
           });
+          updateHasCommentsButtonStateByVehicle(vehicleId, Boolean(data.has_unread));
         } catch (err) {
           vehicleNotesList.innerHTML = `<tr><td colspan="3" class="text-danger">${err.message}</td></tr>`;
         }
       }
 
-      async function loadNoteBody(noteId) {
+      async function loadNoteBody(noteId, vehicleId) {
+        selectedNoteId = noteId;
+        selectedVehicleId = vehicleId;
         noteBodyContent.textContent = 'Loading comment body...';
+        if (noteReadToggle) {
+          noteReadToggle.disabled = true;
+        }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('noteBodyModal')).show();
         try {
           const response = await fetch(`/vehicle_note_body/${noteId}`, { cache: 'no-store' });
           if (!response.ok) throw new Error('Unable to load comment body');
           const data = await response.json();
           noteBodyContent.textContent = data.content || '(No body text)';
+          if (noteReadToggle) {
+            noteReadToggle.checked = true;
+            noteReadToggle.disabled = false;
+          }
+          await saveNoteReadState(vehicleId, noteId, true);
+          updateHasCommentsButtonStateByVehicle(vehicleId, false);
+          await refreshHasCommentsButtonStates();
         } catch (err) {
           noteBodyContent.textContent = err.message;
         }
@@ -1021,6 +1112,7 @@ function renderSearchResults(rows) {
         });
         applyDetailFilters();
         syncVehicleDetailsStickyOffsets();
+        refreshHasCommentsButtonStates();
       }
 
       if (vehicleSearchField && vehicleSearchInput) {
@@ -1076,6 +1168,15 @@ function renderSearchResults(rows) {
       }
 
 
+
+      if (noteReadToggle) {
+        noteReadToggle.addEventListener('change', async () => {
+          if (!selectedVehicleId || !selectedNoteId) return;
+          await saveNoteReadState(selectedVehicleId, selectedNoteId, noteReadToggle.checked);
+          await refreshHasCommentsButtonStates();
+        });
+      }
+
       document.addEventListener('click', (event) => {
         const commentsButton = event.target.closest('.has-comments-btn');
         if (commentsButton && commentsButton.dataset.vehicleId) {
@@ -1084,7 +1185,7 @@ function renderSearchResults(rows) {
         }
         const noteButton = event.target.closest('.note-row-btn');
         if (noteButton && noteButton.dataset.noteId) {
-          loadNoteBody(noteButton.dataset.noteId);
+          loadNoteBody(noteButton.dataset.noteId, noteButton.dataset.vehicleId || selectedVehicleId);
         }
       });
 
