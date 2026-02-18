@@ -112,7 +112,7 @@ def set_comment_read_state(username: str, vehicle_id: int, note_id: int, is_read
         _save_comment_read_state(current_state)
 
 
-def is_note_marked_read(username: str, vehicle_id: int, note_id: int) -> bool:
+def _is_note_marked_read_in_state(state: dict, username: str, vehicle_id: int, note_id: int) -> bool:
     if not username:
         return False
     normalized_user = _normalize_username(username)
@@ -122,6 +122,10 @@ def is_note_marked_read(username: str, vehicle_id: int, note_id: int) -> bool:
         .get(str(vehicle_id), {})
         .get(str(note_id), False)
     )
+
+def is_note_marked_read(username: str, vehicle_id: int, note_id: int) -> bool:
+    state = load_comment_read_state()
+    return _is_note_marked_read_in_state(state, username, vehicle_id, note_id)
 
 
 def load_users() -> dict:
@@ -785,10 +789,13 @@ def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
                     )
                     rows = cur.fetchall()
                     notes = []
+                    comment_read_state = load_comment_read_state() if username else {}
                     for row in rows:
                         date_created = row[3]
                         note_id = row[0]
-                        is_read = is_note_marked_read(username or "", vehicle_id, note_id)
+                        is_read = _is_note_marked_read_in_state(
+                            comment_read_state, username or "", vehicle_id, note_id
+                        )
                         notes.append(
                             {
                                 "Id": note_id,
