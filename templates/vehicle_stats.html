@@ -361,9 +361,15 @@
                   </div>
                 </div>
                 
-                <div class="form-check ms-2">
-                  <input class="form-check-input" type="checkbox" id="liveToggle" {% if live_enabled %}checked{% endif %}>
-                  <label class="form-check-label text-success" for="liveToggle">Live</label>
+                <div class="d-flex flex-column align-items-start gap-2 ms-2">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="liveToggle" {% if live_enabled %}checked{% endif %}>
+                    <label class="form-check-label text-success" for="liveToggle">Live</label>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="commentReadScopeGlobal">
+                    <label class="form-check-label" for="commentReadScopeGlobal">Use global read status (shared across all users)</label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -580,6 +586,46 @@
         return commentReadScopeGlobal && commentReadScopeGlobal.checked ? 'global' : 'user';
       }
 
+      function syncCommentScopeUrlParam() {
+        const url = new URL(window.location.href);
+        if (getCommentReadScope() === 'global') {
+          url.searchParams.set('comment_scope', 'global');
+        } else {
+          url.searchParams.delete('comment_scope');
+        }
+        window.history.replaceState({}, '', url);
+      }
+
+      function applyCommentScopeToDateControls() {
+        const scope = getCommentReadScope();
+        document.querySelectorAll('a.date-link, a.date-field-link').forEach((link) => {
+          const linkUrl = new URL(link.href, window.location.origin);
+          if (scope === 'global') {
+            linkUrl.searchParams.set('comment_scope', 'global');
+          } else {
+            linkUrl.searchParams.delete('comment_scope');
+          }
+          link.href = linkUrl.toString();
+        });
+
+        const customDateForm = document.querySelector('form input[name="filter"][value="custom"]')?.closest('form');
+        if (customDateForm) {
+          let scopeInput = customDateForm.querySelector('input[name="comment_scope"]');
+          if (scope === 'global') {
+            if (!scopeInput) {
+              scopeInput = document.createElement('input');
+              scopeInput.type = 'hidden';
+              scopeInput.name = 'comment_scope';
+              customDateForm.appendChild(scopeInput);
+            }
+            scopeInput.value = 'global';
+          } else if (scopeInput) {
+            scopeInput.remove();
+          }
+        }
+      }
+
+
       function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
         const controller = new AbortController();
         const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -601,6 +647,12 @@
       if (customStartDate && customEndDate) {
         customStartDate.addEventListener('change', syncCustomEndDate);
         customEndDate.addEventListener('focus', syncCustomEndDate);
+      }
+
+      if (commentReadScopeGlobal) {
+        const params = new URLSearchParams(window.location.search);
+        commentReadScopeGlobal.checked = (params.get('comment_scope') || '').toLowerCase() === 'global';
+        applyCommentScopeToDateControls();
       }
       const vehicleDetailsTableBody = document.getElementById('vehicleDetailsTableBody');
       const vehicleDetailsTable = document.getElementById('vehicleDetailsTable');
@@ -1224,12 +1276,15 @@ function renderSearchResults(rows) {
 
       if (commentReadScopeGlobal) {
         commentReadScopeGlobal.addEventListener('change', async () => {
+          syncCommentScopeUrlParam();
+          applyCommentScopeToDateControls();
           await refreshHasCommentsButtonStates();
           if (selectedVehicleId) {
             await loadVehicleNotes(selectedVehicleId);
           }
         });
       }
+
 
       if (noteReadToggle) {
         noteReadToggle.addEventListener('change', async () => {
