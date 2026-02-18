@@ -25,6 +25,8 @@ USERS_FILE_PATH = Path(os.getenv("USERS_FILE_PATH", "users.json"))
 DEFAULT_ADMIN_USERNAME = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
 ADMIN_INITIAL_PASSWORD = os.getenv("ADMIN_INITIAL_PASSWORD")
 USER_STORE_LOCK = threading.RLock()
+COMMENT_READ_STATE_PATH = Path(os.getenv("COMMENT_READ_STATE_PATH", "comment_read_state.json"))
+COMMENT_READ_STATE_LOCK = threading.RLock()
 
 ATLAS_DB_HOST = os.environ["ATLAS_DB_HOST"]
 ATLAS_DB_PORT = int(os.getenv("ATLAS_DB_PORT", "1433"))
@@ -71,6 +73,55 @@ def _save_users(user_map: dict) -> None:
         os.fsync(tmp_file.fileno())
         temp_name = tmp_file.name
     os.replace(temp_name, USERS_FILE_PATH)
+
+
+def _save_comment_read_state(state_map: dict) -> None:
+    COMMENT_READ_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=COMMENT_READ_STATE_PATH.parent, delete=False
+    ) as tmp_file:
+        json.dump(state_map, tmp_file, indent=2)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        temp_name = tmp_file.name
+    os.replace(temp_name, COMMENT_READ_STATE_PATH)
+
+
+def load_comment_read_state() -> dict:
+    with COMMENT_READ_STATE_LOCK:
+        if not COMMENT_READ_STATE_PATH.exists():
+            return {}
+
+        try:
+            with COMMENT_READ_STATE_PATH.open("r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            return loaded if isinstance(loaded, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+
+def set_comment_read_state(username: str, vehicle_id: int, note_id: int, is_read: bool) -> None:
+    if not username:
+        return
+    normalized_user = _normalize_username(username)
+    with COMMENT_READ_STATE_LOCK:
+        current_state = load_comment_read_state()
+        user_state = current_state.setdefault(normalized_user, {})
+        vehicle_state = user_state.setdefault(str(vehicle_id), {})
+        vehicle_state[str(note_id)] = bool(is_read)
+        _save_comment_read_state(current_state)
+
+
+def is_note_marked_read(username: str, vehicle_id: int, note_id: int) -> bool:
+    if not username:
+        return False
+    normalized_user = _normalize_username(username)
+    state = load_comment_read_state()
+    return bool(
+        state.get(normalized_user, {})
+        .get(str(vehicle_id), {})
+        .get(str(note_id), False)
+    )
 
 
 def load_users() -> dict:
@@ -707,7 +758,7 @@ def build_vehicle_stats_context(
     }
 
 
-def get_atlas_vehicle_notes(vehicle_id: int):
+def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
@@ -736,9 +787,12 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                     notes = []
                     for row in rows:
                         date_created = row[3]
+                        note_id = row[0]
+                        is_read = is_note_marked_read(username or "", vehicle_id, note_id)
                         notes.append(
                             {
-                                "Id": row[0],
+                                "Id": note_id,
+                                "VehicleId": vehicle_id,
                                 "Subject": row[1],
                                 "UserName": row[2],
                                 "DateCreated": (
@@ -747,6 +801,7 @@ def get_atlas_vehicle_notes(vehicle_id: int):
                                     else date_created
                                 ),
                                 "IsSendToWeb": row[4],
+                                "IsRead": is_read,
                             }
                         )
                     break
@@ -765,6 +820,22 @@ def get_atlas_vehicle_notes(vehicle_id: int):
         return []
     return []
 
+
+
+
+def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Optional[str]) -> dict:
+    username = username or ""
+    statuses = {}
+    for vehicle_id in vehicle_ids:
+        notes = get_atlas_vehicle_notes(vehicle_id, username=username)
+        has_comments = bool(notes)
+        has_unread = any(not note.get("IsRead", False) for note in notes)
+        statuses[str(vehicle_id)] = {
+            "has_comments": has_comments,
+            "has_unread": has_unread,
+            "all_read": has_comments and not has_unread,
+        }
+    return statuses
 
 def get_atlas_vehicle_note_body(note_id: int):
     fk_candidates = ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId", "Id"]
@@ -1003,8 +1074,42 @@ def vehicle_stats_search():
 
 @app.route("/vehicle_notes/<int:vehicle_id>", methods=["GET"])
 def vehicle_notes(vehicle_id: int):
-    notes = get_atlas_vehicle_notes(vehicle_id)
-    return jsonify({"notes": notes})
+    notes = get_atlas_vehicle_notes(vehicle_id, username=session.get("username"))
+    has_unread = any(not note.get("IsRead", False) for note in notes)
+    return jsonify(
+        {
+            "notes": notes,
+            "has_unread": has_unread,
+            "all_read": bool(notes) and not has_unread,
+        }
+    )
+
+
+@app.route("/vehicle_comment_status", methods=["GET"])
+def vehicle_comment_status():
+    raw_vehicle_ids = request.args.getlist("vehicle_id")
+    vehicle_ids = []
+    for raw_id in raw_vehicle_ids:
+        try:
+            vehicle_ids.append(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+    statuses = get_vehicle_comment_status_for_user(vehicle_ids, session.get("username"))
+    return jsonify({"statuses": statuses})
+
+
+@app.route("/vehicle_note_read_state", methods=["POST"])
+def vehicle_note_read_state():
+    payload = request.get_json(silent=True) or {}
+    try:
+        vehicle_id = int(payload.get("vehicle_id"))
+        note_id = int(payload.get("note_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "vehicle_id and note_id are required integers."}), 400
+
+    is_read = bool(payload.get("is_read", False))
+    set_comment_read_state(session.get("username", ""), vehicle_id, note_id, is_read)
+    return jsonify({"ok": True})
 
 
 @app.route("/vehicle_note_body/<int:note_id>", methods=["GET"])
