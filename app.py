@@ -1209,14 +1209,14 @@ def vehicle_note_read_state():
         return jsonify({"ok": False, "error": "vehicle_id and note_id are required integers."}), 400
 
     is_read = bool(payload.get("is_read", False))
-    set_comment_read_state(session.get("username", ""), vehicle_id, note_id, is_read)    read_scope = normalize_comment_read_scope(payload.get("scope"))
+    read_scope = normalize_comment_read_scope(payload.get("scope"))
     set_comment_read_state(
         session.get("username", ""),
         vehicle_id,
         note_id,
         is_read,
         scope=read_scope,
-    ) 
+    )
     return jsonify({"ok": True})
 
 
