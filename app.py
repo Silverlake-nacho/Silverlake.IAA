@@ -116,7 +116,6 @@ def _is_note_marked_read_in_state(state: dict, username: str, vehicle_id: int, n
     if not username:
         return False
     normalized_user = _normalize_username(username)
-    state = load_comment_read_state()
     return bool(
         state.get(normalized_user, {})
         .get(str(vehicle_id), {})
@@ -769,57 +768,56 @@ def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
 
-            notes = None
-            for vehicle_fk in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"]:
-                try:
-                    cur.execute(
-                        f"""
-                        SELECT TOP (100)
-                            vn.Id,
-                            vn.Subject,
-                            vn.UserName,
-                            CAST(vn.DateCreated AS datetime2) AS DateCreated,
-                            vn.IsSendToWeb
-                        FROM CT_VehicleNotes vn
-                        WHERE vn.{vehicle_fk} = ?
-                          AND ISNULL(vn.IsSendToWeb, 0) = 0
-                        ORDER BY vn.Id DESC
-                        """,
-                        (vehicle_id,),
-                    )
-                    rows = cur.fetchall()
-                    notes = []
-                    comment_read_state = load_comment_read_state() if username else {}
-                    for row in rows:
-                        date_created = row[3]
-                        note_id = row[0]
-                        is_read = _is_note_marked_read_in_state(
-                            comment_read_state, username or "", vehicle_id, note_id
-                        )
-                        notes.append(
-                            {
-                                "Id": note_id,
-                                "VehicleId": vehicle_id,
-                                "Subject": row[1],
-                                "UserName": row[2],
-                                "DateCreated": (
-                                    date_created.strftime("%Y-%m-%d %H:%M:%S")
-                                    if isinstance(date_created, datetime)
-                                    else date_created
-                                ),
-                                "IsSendToWeb": row[4],
-                                "IsRead": is_read,
-                            }
-                        )
-                    break
-                except Exception:
-                    notes = None
+            note_relationships = resolve_vehicle_note_relationships(cur)
+            vehicle_fk = note_relationships.get("vehicle_fk")
+            if not vehicle_fk:
+                cur.close()
+                conn.close()
+                return []
+
+            cur.execute(
+                f"""
+                SELECT TOP (100)
+                    vn.Id,
+                    vn.Subject,
+                    vn.UserName,
+                    CAST(vn.DateCreated AS datetime2) AS DateCreated,
+                    vn.IsSendToWeb
+                FROM CT_VehicleNotes vn
+                WHERE vn.{vehicle_fk} = ?
+                  AND ISNULL(vn.IsSendToWeb, 0) = 0
+                ORDER BY vn.Id DESC
+                """,
+                (vehicle_id,),
+            )
+            rows = cur.fetchall()
+            notes = []
+            comment_read_state = load_comment_read_state() if username else {}
+            for row in rows:
+                date_created = row[3]
+                note_id = row[0]
+                is_read = _is_note_marked_read_in_state(
+                    comment_read_state, username or "", vehicle_id, note_id
+                )
+                notes.append(
+                    {
+                        "Id": note_id,
+                        "VehicleId": vehicle_id,
+                        "Subject": row[1],
+                        "UserName": row[2],
+                        "DateCreated": (
+                            date_created.strftime("%Y-%m-%d %H:%M:%S")
+                            if isinstance(date_created, datetime)
+                            else date_created
+                        ),
+                        "IsSendToWeb": row[4],
+                        "IsRead": is_read,
+                    }
+                )
 
             cur.close()
             conn.close()
-
-            if notes is not None:
-                return notes
+            return notes
         except Exception as exc:
             last_error = exc
 
@@ -832,8 +830,77 @@ def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
 
 def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Optional[str]) -> dict:
     username = username or ""
-    statuses = {}
-    for vehicle_id in vehicle_ids:
+    deduplicated_vehicle_ids = list(dict.fromkeys(vehicle_ids))
+    statuses = {
+        str(vehicle_id): {
+            "has_comments": False,
+            "has_unread": False,
+            "all_read": False,
+        }
+        for vehicle_id in deduplicated_vehicle_ids
+    }
+
+    if not deduplicated_vehicle_ids:
+        return statuses
+
+    comment_read_state = load_comment_read_state() if username else {}
+    max_chunk_size = 500
+    last_error = None
+
+    for database_name in _get_atlas_db_name_candidates():
+        try:
+            conn = get_atlas_db_connection(database_name)
+            cur = conn.cursor()
+            note_relationships = resolve_vehicle_note_relationships(cur)
+            vehicle_fk = note_relationships.get("vehicle_fk")
+
+            if not vehicle_fk:
+                cur.close()
+                conn.close()
+                return statuses
+
+            notes_by_vehicle = {vehicle_id: [] for vehicle_id in deduplicated_vehicle_ids}
+            for offset in range(0, len(deduplicated_vehicle_ids), max_chunk_size):
+                chunk = deduplicated_vehicle_ids[offset : offset + max_chunk_size]
+                placeholders = ", ".join("?" for _ in chunk)
+                cur.execute(
+                    f"""
+                    SELECT
+                        vn.{vehicle_fk} AS VehicleId,
+                        vn.Id AS NoteId
+                    FROM CT_VehicleNotes vn
+                    WHERE vn.{vehicle_fk} IN ({placeholders})
+                      AND ISNULL(vn.IsSendToWeb, 0) = 0
+                    """,
+                    tuple(chunk),
+                )
+                for row in cur.fetchall():
+                    row_vehicle_id = int(row[0])
+                    if row_vehicle_id in notes_by_vehicle:
+                        notes_by_vehicle[row_vehicle_id].append(int(row[1]))
+
+            cur.close()
+            conn.close()
+
+            for vehicle_id, note_ids in notes_by_vehicle.items():
+                has_comments = bool(note_ids)
+                has_unread = any(
+                    not _is_note_marked_read_in_state(
+                        comment_read_state, username, vehicle_id, note_id
+                    )
+                    for note_id in note_ids
+                )
+                statuses[str(vehicle_id)] = {
+                    "has_comments": has_comments,
+                    "has_unread": has_unread,
+                    "all_read": has_comments and not has_unread,
+                }
+
+            return statuses
+        except Exception as exc:
+            last_error = exc
+
+    for vehicle_id in deduplicated_vehicle_ids:
         notes = get_atlas_vehicle_notes(vehicle_id, username=username)
         has_comments = bool(notes)
         has_unread = any(not note.get("IsRead", False) for note in notes)
@@ -842,6 +909,9 @@ def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Option
             "has_unread": has_unread,
             "all_read": has_comments and not has_unread,
         }
+
+    if last_error:
+        return statuses
     return statuses
 
 def get_atlas_vehicle_note_body(note_id: int):
