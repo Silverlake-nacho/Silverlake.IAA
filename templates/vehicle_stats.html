@@ -566,7 +566,19 @@
       let currentDetailRows = {{ detail_rows|tojson }};
       let selectedVehicleId = null;
       let selectedNoteId = null;
+      let vehicleNotesRequestController = null;
 
+      function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+        const signal = options.signal
+          ? AbortSignal.any([options.signal, controller.signal])
+          : controller.signal;
+
+        return fetch(resource, { ...options, signal })
+          .finally(() => window.clearTimeout(timeoutId));
+      }
+      
       function syncCustomEndDate() {
         if (!customStartDate || !customEndDate) return;
         if (!customEndDate.value && customStartDate.value) {
@@ -932,6 +944,9 @@ function renderSearchResults(rows) {
       }
 
       async function loadVehicleNotes(vehicleId) {
+        vehicleNotesRequestController?.abort();
+        vehicleNotesRequestController = new AbortController();
+
         selectedVehicleId = vehicleId;
         selectedNoteId = null;
         noteBodyContent.textContent = '';
@@ -943,7 +958,14 @@ function renderSearchResults(rows) {
         vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
-          const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
+          const response = await fetchWithTimeout(
+            `/vehicle_notes/${vehicleId}`,
+            {
+              cache: 'no-store',
+              signal: vehicleNotesRequestController.signal,
+            },
+            15000
+          );
           if (!response.ok) throw new Error('Unable to load notes');
           const data = await response.json();
           const notes = data.notes || [];
@@ -978,7 +1000,13 @@ function renderSearchResults(rows) {
           });
           updateHasCommentsButtonStateByVehicle(vehicleId, Boolean(data.has_unread));
         } catch (err) {
+          if (err.name === 'AbortError') {
+            vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-warning">Loading comments timed out. Please try again.</td></tr>';
+            return;
+          }
           vehicleNotesList.innerHTML = `<tr><td colspan="3" class="text-danger">${err.message}</td></tr>`;
+        } finally {
+          vehicleNotesRequestController = null;
         }
       }
 
