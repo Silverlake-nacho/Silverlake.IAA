@@ -226,7 +226,7 @@
       .note-row-btn:hover {
         background: #e9ecef;
       }
-            .vehicle-note-subject-unread {
+      .vehicle-note-subject-unread {
         font-weight: 700;
       }
       
@@ -511,6 +511,10 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="commentReadScopeGlobal">
+              <label class="form-check-label" for="commentReadScopeGlobal">Use global read status (shared across all users)</label>
+            </div>
             <div class="table-responsive">
               <table class="table table-striped table-sm align-middle mb-0">
                 <thead>
@@ -565,11 +569,16 @@
       const vehicleNotesList = document.getElementById('vehicleNotesList');
       const noteBodyContent = document.getElementById('noteBodyContent');
       const noteReadToggle = document.getElementById('noteReadToggle');
+      const commentReadScopeGlobal = document.getElementById('commentReadScopeGlobal');
       let detailColumnNames = {{ detail_columns|tojson }};
       let currentDetailRows = {{ detail_rows|tojson }};
       let selectedVehicleId = null;
       let selectedNoteId = null;
       let vehicleNotesRequestController = null;
+
+      function getCommentReadScope() {
+        return commentReadScopeGlobal && commentReadScopeGlobal.checked ? 'global' : 'user';
+      }
 
       function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
         const controller = new AbortController();
@@ -630,6 +639,7 @@
         if (!uniqueIds.length) return;
 
         const url = new URL('/vehicle_comment_status', window.location.origin);
+        url.searchParams.set('scope', getCommentReadScope());
         uniqueIds.forEach((vehicleId) => url.searchParams.append('vehicle_id', vehicleId));
         try {
           const response = await fetch(url.toString(), { cache: 'no-store' });
@@ -939,6 +949,7 @@ function renderSearchResults(rows) {
               vehicle_id: Number(vehicleId),
               note_id: Number(noteId),
               is_read: Boolean(isRead),
+              scope: getCommentReadScope(),
             }),
           });
         } catch (err) {
@@ -967,8 +978,10 @@ function renderSearchResults(rows) {
         vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
+          const notesUrl = new URL(`/vehicle_notes/${vehicleId}`, window.location.origin);
+          notesUrl.searchParams.set('scope', getCommentReadScope());
           const response = await fetchWithTimeout(
-            `/vehicle_notes/${vehicleId}`,
+            notesUrl.toString(),
             {
               cache: 'no-store',
               signal: vehicleNotesRequestController.signal,
@@ -1208,6 +1221,15 @@ function renderSearchResults(rows) {
       }
 
 
+
+      if (commentReadScopeGlobal) {
+        commentReadScopeGlobal.addEventListener('change', async () => {
+          await refreshHasCommentsButtonStates();
+          if (selectedVehicleId) {
+            await loadVehicleNotes(selectedVehicleId);
+          }
+        });
+      }
 
       if (noteReadToggle) {
         noteReadToggle.addEventListener('change', async () => {
