@@ -203,17 +203,12 @@
         border: 0;
         background: none;
         padding: 0;
+        color: #0d6efd;
         text-decoration: underline;
-        font-weight: 700;
-      }
-      .has-comments-btn.has-comments-unread {
-        color: #b42318;
-      }
-      .has-comments-btn.has-comments-read {
-        color: #067647;
+        font-weight: 600;
       }
       .has-comments-btn:hover {
-        opacity: 0.85;
+        color: #0a58ca;
       }
       .note-row-btn {
         border: 0;
@@ -225,9 +220,6 @@
       }
       .note-row-btn:hover {
         background: #e9ecef;
-      }
-      .vehicle-note-subject-unread {
-        font-weight: 700;
       }
       
       .vehicle-details-table thead th {
@@ -361,12 +353,9 @@
                   </div>
                 </div>
                 
-                <div class="d-flex flex-column align-items-start gap-2 ms-2">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="liveToggle" {% if live_enabled %}checked{% endif %}>
-                    <label class="form-check-label text-success" for="liveToggle">Live</label>
-                  </div>
-                  
+                <div class="form-check ms-2">
+                  <input class="form-check-input" type="checkbox" id="liveToggle" {% if live_enabled %}checked{% endif %}>
+                  <label class="form-check-label text-success" for="liveToggle">Live</label>
                 </div>
               </div>
             </div>
@@ -470,7 +459,7 @@
                             <tr>
                               {% for value in row %}
                                 {% if detail_columns[loop.index0] == 'HasComments' and value == 'YES' %}
-                                  <td><button type="button" class="has-comments-btn has-comments-unread" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
+                                  <td><button type="button" class="has-comments-btn" data-vehicle-id="{{ row[slk_id_index] }}">YES</button></td>
                                 {% else %}
                                   <td>{{ value }}</td>
                                 {% endif %}
@@ -514,7 +503,6 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-
             <div class="table-responsive">
               <table class="table table-striped table-sm align-middle mb-0">
                 <thead>
@@ -542,13 +530,7 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <pre id="noteBodyContent" class="mb-3" style="white-space: pre-wrap;"></pre>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="noteReadToggle">
-              <label class="form-check-label" for="noteReadToggle">
-                Mark this comment as read
-              </label>
-            </div>
+            <pre id="noteBodyContent" class="mb-0" style="white-space: pre-wrap;"></pre>
           </div>
         </div>
       </div>
@@ -568,77 +550,9 @@
       const dateFieldLabel = document.getElementById('dateFieldLabel');
       const vehicleNotesList = document.getElementById('vehicleNotesList');
       const noteBodyContent = document.getElementById('noteBodyContent');
-      const noteReadToggle = document.getElementById('noteReadToggle');
-      const commentReadScopeToggles = Array.from(document.querySelectorAll('[data-comment-scope-toggle]'));
       let detailColumnNames = {{ detail_columns|tojson }};
       let currentDetailRows = {{ detail_rows|tojson }};
-      let selectedVehicleId = null;
-      let selectedNoteId = null;
-      let vehicleNotesRequestController = null;
-      let isGlobalCommentScopeEnabled = false;
 
-      function getCommentReadScope() {
-        return isGlobalCommentScopeEnabled ? 'global' : 'user';
-      }
-
-      function syncCommentReadScopeToggles(checked) {
-        isGlobalCommentScopeEnabled = Boolean(checked);
-        commentReadScopeToggles.forEach((toggle) => {
-          toggle.checked = isGlobalCommentScopeEnabled;
-        });
-      }
-
-      function syncCommentScopeUrlParam() {
-        const url = new URL(window.location.href);
-        if (getCommentReadScope() === 'global') {
-          url.searchParams.set('comment_scope', 'global');
-        } else {
-          url.searchParams.delete('comment_scope');
-        }
-        window.history.replaceState({}, '', url);
-      }
-
-      function applyCommentScopeToDateControls() {
-        const scope = getCommentReadScope();
-        document.querySelectorAll('a.date-link, a.date-field-link').forEach((link) => {
-          const linkUrl = new URL(link.href, window.location.origin);
-          if (scope === 'global') {
-            linkUrl.searchParams.set('comment_scope', 'global');
-          } else {
-            linkUrl.searchParams.delete('comment_scope');
-          }
-          link.href = linkUrl.toString();
-        });
-
-        const customDateForm = document.querySelector('form input[name="filter"][value="custom"]')?.closest('form');
-        if (customDateForm) {
-          let scopeInput = customDateForm.querySelector('input[name="comment_scope"]');
-          if (scope === 'global') {
-            if (!scopeInput) {
-              scopeInput = document.createElement('input');
-              scopeInput.type = 'hidden';
-              scopeInput.name = 'comment_scope';
-              customDateForm.appendChild(scopeInput);
-            }
-            scopeInput.value = 'global';
-          } else if (scopeInput) {
-            scopeInput.remove();
-          }
-        }
-      }
-
-
-      function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
-        const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-        const signal = options.signal
-          ? AbortSignal.any([options.signal, controller.signal])
-          : controller.signal;
-
-        return fetch(resource, { ...options, signal })
-          .finally(() => window.clearTimeout(timeoutId));
-      }
-      
       function syncCustomEndDate() {
         if (!customStartDate || !customEndDate) return;
         if (!customEndDate.value && customStartDate.value) {
@@ -649,12 +563,6 @@
       if (customStartDate && customEndDate) {
         customStartDate.addEventListener('change', syncCustomEndDate);
         customEndDate.addEventListener('focus', syncCustomEndDate);
-      }
-
-      if (commentReadScopeToggles.length) {
-        const params = new URLSearchParams(window.location.search);
-        syncCommentReadScopeToggles((params.get('comment_scope') || '').toLowerCase() === 'global');
-        applyCommentScopeToDateControls();
       }
       const vehicleDetailsTableBody = document.getElementById('vehicleDetailsTableBody');
       const vehicleDetailsTable = document.getElementById('vehicleDetailsTable');
@@ -672,42 +580,6 @@
       let currentChartType = 'bar';
       let labels = chartLabels.slice();
       let values = chartValues.slice();
-
-      function updateHasCommentsButtonState(button, hasUnread) {
-        if (!button) return;
-        button.classList.remove('has-comments-read', 'has-comments-unread');
-        button.classList.add(hasUnread ? 'has-comments-unread' : 'has-comments-read');
-      }
-
-      function updateHasCommentsButtonStateByVehicle(vehicleId, hasUnread) {
-        document.querySelectorAll(`.has-comments-btn[data-vehicle-id="${String(vehicleId)}"]`).forEach((button) => {
-          updateHasCommentsButtonState(button, hasUnread);
-        });
-      }
-
-      async function refreshHasCommentsButtonStates() {
-        const ids = Array.from(document.querySelectorAll('.has-comments-btn[data-vehicle-id]'))
-          .map((button) => (button.dataset.vehicleId || '').trim())
-          .filter((value) => value);
-        const uniqueIds = [...new Set(ids)];
-        if (!uniqueIds.length) return;
-
-        const url = new URL('/vehicle_comment_status', window.location.origin);
-        url.searchParams.set('scope', getCommentReadScope());
-        uniqueIds.forEach((vehicleId) => url.searchParams.append('vehicle_id', vehicleId));
-        try {
-          const response = await fetch(url.toString(), { cache: 'no-store' });
-          if (!response.ok) return;
-          const data = await response.json();
-          const statuses = data.statuses || {};
-          uniqueIds.forEach((vehicleId) => {
-            const status = statuses[String(vehicleId)] || {};
-            updateHasCommentsButtonStateByVehicle(vehicleId, Boolean(status.has_unread));
-          });
-        } catch (err) {
-          console.error('Unable to refresh comment read statuses', err);
-        }
-      }
 
       function generateColors(count) {
         const palette = ['#5c9c13', '#7fbf2e', '#b2d97c', '#2e5e0f', '#3f7f16', '#94c11f'];
@@ -854,7 +726,7 @@
             if (index === commentsIndex && value === 'YES') {
               const button = document.createElement('button');
               button.type = 'button';
-              button.className = 'has-comments-btn has-comments-unread';
+              button.className = 'has-comments-btn';
               button.dataset.vehicleId = slkIdIndex >= 0 ? row[slkIdIndex] : row[0];
               button.textContent = 'YES';
               td.appendChild(button);
@@ -868,7 +740,6 @@
         applyDetailFilters();
         showSearchPlaceholder('Enter a search value and click Search.');
         syncVehicleDetailsStickyOffsets();
-        refreshHasCommentsButtonStates();
       }
 
 function renderSearchResults(rows) {
@@ -890,7 +761,7 @@ function renderSearchResults(rows) {
             if (index === commentsIndex && value === 'YES') {
               const button = document.createElement('button');
               button.type = 'button';
-              button.className = 'has-comments-btn has-comments-unread';
+              button.className = 'has-comments-btn';
               button.dataset.vehicleId = slkIdIndex >= 0 ? row[slkIdIndex] : row[0];
               button.textContent = 'YES';
               td.appendChild(button);
@@ -901,7 +772,6 @@ function renderSearchResults(rows) {
           });
           vehicleSearchTableBody.appendChild(tr);
         });
-        refreshHasCommentsButtonStates();
       }
 
       function showSearchPlaceholder(message) {
@@ -993,61 +863,16 @@ function renderSearchResults(rows) {
         return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
       }
 
-      async function saveNoteReadState(vehicleId, noteId, isRead) {
-        if (!vehicleId || !noteId) return;
-        try {
-          await fetch('/vehicle_note_read_state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vehicle_id: Number(vehicleId),
-              note_id: Number(noteId),
-              is_read: Boolean(isRead),
-              scope: getCommentReadScope(),
-            }),
-          });
-        } catch (err) {
-          console.error('Unable to save note read state', err);
-        }
-      }
-
-      function setNoteSubjectReadState(noteId, isRead) {
-        const subjectCell = vehicleNotesList.querySelector(`[data-note-subject-id="${String(noteId)}"]`);
-        if (!subjectCell) return;
-        subjectCell.classList.toggle('vehicle-note-subject-unread', !Boolean(isRead));
-      }
-
       async function loadVehicleNotes(vehicleId) {
-        vehicleNotesRequestController?.abort();
-        vehicleNotesRequestController = new AbortController();
-
-        selectedVehicleId = vehicleId;
-        selectedNoteId = null;
-        noteBodyContent.textContent = '';
-        if (noteReadToggle) {
-          noteReadToggle.checked = false;
-          noteReadToggle.disabled = true;
-        }
-
         vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">Loading comments...</td></tr>';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('vehicleNotesModal')).show();
         try {
-          const notesUrl = new URL(`/vehicle_notes/${vehicleId}`, window.location.origin);
-          notesUrl.searchParams.set('scope', getCommentReadScope());
-          const response = await fetchWithTimeout(
-            notesUrl.toString(),
-            {
-              cache: 'no-store',
-              signal: vehicleNotesRequestController.signal,
-            },
-            15000
-          );
+          const response = await fetch(`/vehicle_notes/${vehicleId}`, { cache: 'no-store' });
           if (!response.ok) throw new Error('Unable to load notes');
           const data = await response.json();
           const notes = data.notes || [];
           if (!notes.length) {
             vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-muted">No comments found for this vehicle.</td></tr>';
-            updateHasCommentsButtonStateByVehicle(vehicleId, false);
             return;
           }
           vehicleNotesList.innerHTML = '';
@@ -1059,15 +884,12 @@ function renderSearchResults(rows) {
             idButton.type = 'button';
             idButton.className = 'note-row-btn btn btn-link btn-sm p-0';
             idButton.dataset.noteId = note.Id;
-            idButton.dataset.vehicleId = vehicleId;
             idButton.textContent = formatNoteCellValue(note.Id);
             idTd.appendChild(idButton);
             tr.appendChild(idTd);
 
             const subjectTd = document.createElement('td');
-            subjectTd.dataset.noteSubjectId = String(note.Id);
             subjectTd.textContent = formatNoteCellValue(note.Subject);
-            subjectTd.classList.toggle('vehicle-note-subject-unread', !Boolean(note.IsRead));
             tr.appendChild(subjectTd);
 
             const dateCreatedTd = document.createElement('td');
@@ -1076,39 +898,19 @@ function renderSearchResults(rows) {
 
             vehicleNotesList.appendChild(tr);
           });
-          updateHasCommentsButtonStateByVehicle(vehicleId, Boolean(data.has_unread));
         } catch (err) {
-          if (err.name === 'AbortError') {
-            vehicleNotesList.innerHTML = '<tr><td colspan="3" class="text-warning">Loading comments timed out. Please try again.</td></tr>';
-            return;
-          }
           vehicleNotesList.innerHTML = `<tr><td colspan="3" class="text-danger">${err.message}</td></tr>`;
-        } finally {
-          vehicleNotesRequestController = null;
         }
       }
 
-      async function loadNoteBody(noteId, vehicleId) {
-        selectedNoteId = noteId;
-        selectedVehicleId = vehicleId;
+      async function loadNoteBody(noteId) {
         noteBodyContent.textContent = 'Loading comment body...';
-        if (noteReadToggle) {
-          noteReadToggle.disabled = true;
-        }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('noteBodyModal')).show();
         try {
           const response = await fetch(`/vehicle_note_body/${noteId}`, { cache: 'no-store' });
           if (!response.ok) throw new Error('Unable to load comment body');
           const data = await response.json();
           noteBodyContent.textContent = data.content || '(No body text)';
-          if (noteReadToggle) {
-            noteReadToggle.checked = true;
-            noteReadToggle.disabled = false;
-          }
-          await saveNoteReadState(vehicleId, noteId, true);
-          setNoteSubjectReadState(noteId, true);
-          updateHasCommentsButtonStateByVehicle(vehicleId, false);
-          await refreshHasCommentsButtonStates();
         } catch (err) {
           noteBodyContent.textContent = err.message;
         }
@@ -1219,7 +1021,6 @@ function renderSearchResults(rows) {
         });
         applyDetailFilters();
         syncVehicleDetailsStickyOffsets();
-        refreshHasCommentsButtonStates();
       }
 
       if (vehicleSearchField && vehicleSearchInput) {
@@ -1275,29 +1076,6 @@ function renderSearchResults(rows) {
       }
 
 
-
-      if (commentReadScopeToggles.length) {
-        commentReadScopeToggles.forEach((scopeToggle) => scopeToggle.addEventListener('change', async () => {
-          syncCommentReadScopeToggles(scopeToggle.checked);
-          syncCommentScopeUrlParam();
-          applyCommentScopeToDateControls();
-          await refreshHasCommentsButtonStates();
-          if (selectedVehicleId) {
-            await loadVehicleNotes(selectedVehicleId);
-          }
-        }));
-      }
-
-
-      if (noteReadToggle) {
-        noteReadToggle.addEventListener('change', async () => {
-          if (!selectedVehicleId || !selectedNoteId) return;
-          await saveNoteReadState(selectedVehicleId, selectedNoteId, noteReadToggle.checked);
-          setNoteSubjectReadState(selectedNoteId, noteReadToggle.checked);
-          await refreshHasCommentsButtonStates();
-        });
-      }
-
       document.addEventListener('click', (event) => {
         const commentsButton = event.target.closest('.has-comments-btn');
         if (commentsButton && commentsButton.dataset.vehicleId) {
@@ -1306,7 +1084,7 @@ function renderSearchResults(rows) {
         }
         const noteButton = event.target.closest('.note-row-btn');
         if (noteButton && noteButton.dataset.noteId) {
-          loadNoteBody(noteButton.dataset.noteId, noteButton.dataset.vehicleId || selectedVehicleId);
+          loadNoteBody(noteButton.dataset.noteId);
         }
       });
 
