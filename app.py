@@ -25,9 +25,6 @@ USERS_FILE_PATH = Path(os.getenv("USERS_FILE_PATH", "users.json"))
 DEFAULT_ADMIN_USERNAME = os.getenv("DEFAULT_ADMIN_USERNAME", "admin")
 ADMIN_INITIAL_PASSWORD = os.getenv("ADMIN_INITIAL_PASSWORD")
 USER_STORE_LOCK = threading.RLock()
-COMMENT_READ_STATE_PATH = Path(os.getenv("COMMENT_READ_STATE_PATH", "comment_read_state.json"))
-COMMENT_READ_STATE_LOCK = threading.RLock()
-GLOBAL_COMMENT_READ_SCOPE = "__global__"
 
 ATLAS_DB_HOST = os.environ["ATLAS_DB_HOST"]
 ATLAS_DB_PORT = int(os.getenv("ATLAS_DB_PORT", "1433"))
@@ -74,75 +71,6 @@ def _save_users(user_map: dict) -> None:
         os.fsync(tmp_file.fileno())
         temp_name = tmp_file.name
     os.replace(temp_name, USERS_FILE_PATH)
-
-
-def _save_comment_read_state(state_map: dict) -> None:
-    COMMENT_READ_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=COMMENT_READ_STATE_PATH.parent, delete=False
-    ) as tmp_file:
-        json.dump(state_map, tmp_file, indent=2)
-        tmp_file.flush()
-        os.fsync(tmp_file.fileno())
-        temp_name = tmp_file.name
-    os.replace(temp_name, COMMENT_READ_STATE_PATH)
-
-
-def load_comment_read_state() -> dict:
-    with COMMENT_READ_STATE_LOCK:
-        if not COMMENT_READ_STATE_PATH.exists():
-            return {}
-
-        try:
-            with COMMENT_READ_STATE_PATH.open("r", encoding="utf-8") as f:
-                loaded = json.load(f)
-            return loaded if isinstance(loaded, dict) else {}
-        except (OSError, json.JSONDecodeError):
-            return {}
-
-
-def normalize_comment_read_scope(scope: Optional[str]) -> str:
-    return "global" if (scope or "").strip().lower() == "global" else "user"
-
-
-def _comment_read_scope_key(username: str, scope: str) -> str:
-    resolved_scope = normalize_comment_read_scope(scope)
-    if resolved_scope == "global":
-        return GLOBAL_COMMENT_READ_SCOPE
-    return _normalize_username(username)
-
-
-def set_comment_read_state(
-    username: str, vehicle_id: int, note_id: int, is_read: bool, scope: str = "user"
-) -> None:
-    state_key = _comment_read_scope_key(username, scope)
-    if not state_key:
-        return
-        
-    with COMMENT_READ_STATE_LOCK:
-        current_state = load_comment_read_state()
-        user_state = current_state.setdefault(state_key, {})
-        vehicle_state = user_state.setdefault(str(vehicle_id), {})
-        vehicle_state[str(note_id)] = bool(is_read)
-        _save_comment_read_state(current_state)
-
-
-def _is_note_marked_read_in_state(
-    state: dict, username: str, vehicle_id: int, note_id: int, scope: str = "user"
-) -> bool:
-    state_key = _comment_read_scope_key(username, scope)
-    if not state_key:
-        return False
-        
-    return bool(
-        state.get(state_key, {})
-        .get(str(vehicle_id), {})
-        .get(str(note_id), False)
-    )
-
-def is_note_marked_read(username: str, vehicle_id: int, note_id: int, scope: str = "user") -> bool:
-    state = load_comment_read_state()
-    return _is_note_marked_read_in_state(state, username, vehicle_id, note_id, scope=scope)
 
 
 def load_users() -> dict:
@@ -779,63 +707,57 @@ def build_vehicle_stats_context(
     }
 
 
-def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None, scope: str = "user"):
+def get_atlas_vehicle_notes(vehicle_id: int):
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
             conn = get_atlas_db_connection(database_name)
             cur = conn.cursor()
 
-            note_relationships = resolve_vehicle_note_relationships(cur)
-            vehicle_fk = note_relationships.get("vehicle_fk")
-            if not vehicle_fk:
-                cur.close()
-                conn.close()
-                return []
-
-            cur.execute(
-                f"""
-                SELECT TOP (100)
-                    vn.Id,
-                    vn.Subject,
-                    vn.UserName,
-                    CAST(vn.DateCreated AS datetime2) AS DateCreated,
-                    vn.IsSendToWeb
-                FROM CT_VehicleNotes vn
-                WHERE vn.{vehicle_fk} = ?
-                  AND ISNULL(vn.IsSendToWeb, 0) = 0
-                ORDER BY vn.Id DESC
-                """,
-                (vehicle_id,),
-            )
-            rows = cur.fetchall()
-            notes = []
-            comment_read_state = load_comment_read_state() if (_comment_read_scope_key(username or "", scope)) else {}
-            for row in rows:
-                date_created = row[3]
-                note_id = row[0]
-                is_read = _is_note_marked_read_in_state(
-                    comment_read_state, username or "", vehicle_id, note_id, scope=scope
-                )
-                notes.append(
-                    {
-                        "Id": note_id,
-                        "VehicleId": vehicle_id,
-                        "Subject": row[1],
-                        "UserName": row[2],
-                        "DateCreated": (
-                            date_created.strftime("%Y-%m-%d %H:%M:%S")
-                            if isinstance(date_created, datetime)
-                            else date_created
-                        ),
-                        "IsSendToWeb": row[4],
-                        "IsRead": is_read,
-                    }
-                )
+            notes = None
+            for vehicle_fk in ["CtVehicleId", "VehicleId", "CTVehicleId", "Id"]:
+                try:
+                    cur.execute(
+                        f"""
+                        SELECT TOP (100)
+                            vn.Id,
+                            vn.Subject,
+                            vn.UserName,
+                            CAST(vn.DateCreated AS datetime2) AS DateCreated,
+                            vn.IsSendToWeb
+                        FROM CT_VehicleNotes vn
+                        WHERE vn.{vehicle_fk} = ?
+                          AND ISNULL(vn.IsSendToWeb, 0) = 0
+                        ORDER BY vn.Id DESC
+                        """,
+                        (vehicle_id,),
+                    )
+                    rows = cur.fetchall()
+                    notes = []
+                    for row in rows:
+                        date_created = row[3]
+                        notes.append(
+                            {
+                                "Id": row[0],
+                                "Subject": row[1],
+                                "UserName": row[2],
+                                "DateCreated": (
+                                    date_created.strftime("%Y-%m-%d %H:%M:%S")
+                                    if isinstance(date_created, datetime)
+                                    else date_created
+                                ),
+                                "IsSendToWeb": row[4],
+                            }
+                        )
+                    break
+                except Exception:
+                    notes = None
 
             cur.close()
             conn.close()
-            return notes
+
+            if notes is not None:
+                return notes
         except Exception as exc:
             last_error = exc
 
@@ -843,94 +765,6 @@ def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None, sco
         return []
     return []
 
-
-
-
-def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Optional[str], scope: str = "user") -> dict:
-    username = username or ""
-    deduplicated_vehicle_ids = list(dict.fromkeys(vehicle_ids))
-    statuses = {
-        str(vehicle_id): {
-            "has_comments": False,
-            "has_unread": False,
-            "all_read": False,
-        }
-        for vehicle_id in deduplicated_vehicle_ids
-    }
-
-    if not deduplicated_vehicle_ids:
-        return statuses
-
-    comment_read_state = load_comment_read_state() if (_comment_read_scope_key(username or "", scope)) else {}
-    max_chunk_size = 500
-    last_error = None
-
-    for database_name in _get_atlas_db_name_candidates():
-        try:
-            conn = get_atlas_db_connection(database_name)
-            cur = conn.cursor()
-            note_relationships = resolve_vehicle_note_relationships(cur)
-            vehicle_fk = note_relationships.get("vehicle_fk")
-
-            if not vehicle_fk:
-                cur.close()
-                conn.close()
-                return statuses
-
-            notes_by_vehicle = {vehicle_id: [] for vehicle_id in deduplicated_vehicle_ids}
-            for offset in range(0, len(deduplicated_vehicle_ids), max_chunk_size):
-                chunk = deduplicated_vehicle_ids[offset : offset + max_chunk_size]
-                placeholders = ", ".join("?" for _ in chunk)
-                cur.execute(
-                    f"""
-                    SELECT
-                        vn.{vehicle_fk} AS VehicleId,
-                        vn.Id AS NoteId
-                    FROM CT_VehicleNotes vn
-                    WHERE vn.{vehicle_fk} IN ({placeholders})
-                      AND ISNULL(vn.IsSendToWeb, 0) = 0
-                    """,
-                    tuple(chunk),
-                )
-                for row in cur.fetchall():
-                    row_vehicle_id = int(row[0])
-                    if row_vehicle_id in notes_by_vehicle:
-                        notes_by_vehicle[row_vehicle_id].append(int(row[1]))
-
-            cur.close()
-            conn.close()
-
-            for vehicle_id, note_ids in notes_by_vehicle.items():
-                has_comments = bool(note_ids)
-                has_unread = any(
-                    not _is_note_marked_read_in_state(
-                        comment_read_state, username, vehicle_id, note_id, scope=scope
-                    )
-                    for note_id in note_ids
-                )
-                statuses[str(vehicle_id)] = {
-                    "has_comments": has_comments,
-                    "has_unread": has_unread,
-                    "all_read": has_comments and not has_unread,
-                }
-
-            return statuses
-        except Exception as exc:
-            last_error = exc
-
-    for vehicle_id in deduplicated_vehicle_ids:
-        notes = get_atlas_vehicle_notes(vehicle_id, username=username, scope=scope)
-        has_comments = bool(notes)
-        has_unread = any(not note.get("IsRead", False) for note in notes)
-        statuses[str(vehicle_id)] = {
-            "has_comments": has_comments,
-            "has_unread": has_unread,
-            "all_read": has_comments and not has_unread,
-        }
-
-    if last_error:
-        return statuses
-    return statuses
 
 def get_atlas_vehicle_note_body(note_id: int):
     fk_candidates = ["CtVehicleNoteId", "VehicleNoteId", "CTVehicleNoteId", "Id"]
@@ -1169,55 +1003,8 @@ def vehicle_stats_search():
 
 @app.route("/vehicle_notes/<int:vehicle_id>", methods=["GET"])
 def vehicle_notes(vehicle_id: int):
-    read_scope = normalize_comment_read_scope(request.args.get("scope"))
-    notes = get_atlas_vehicle_notes(
-        vehicle_id,
-        username=session.get("username"),
-        scope=read_scope,
-    )
-    has_unread = any(not note.get("IsRead", False) for note in notes)
-    return jsonify(
-        {
-            "notes": notes,
-            "has_unread": has_unread,
-            "all_read": bool(notes) and not has_unread,
-        }
-    )
-
-
-@app.route("/vehicle_comment_status", methods=["GET"])
-def vehicle_comment_status():
-    read_scope = normalize_comment_read_scope(request.args.get("scope"))
-    raw_vehicle_ids = request.args.getlist("vehicle_id")
-    vehicle_ids = []
-    for raw_id in raw_vehicle_ids:
-        try:
-            vehicle_ids.append(int(raw_id))
-        except (TypeError, ValueError):
-            continue
-    statuses = get_vehicle_comment_status_for_user(vehicle_ids, session.get("username"), scope=read_scope)
-    return jsonify({"statuses": statuses})
-
-
-@app.route("/vehicle_note_read_state", methods=["POST"])
-def vehicle_note_read_state():
-    payload = request.get_json(silent=True) or {}
-    try:
-        vehicle_id = int(payload.get("vehicle_id"))
-        note_id = int(payload.get("note_id"))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "vehicle_id and note_id are required integers."}), 400
-
-    is_read = bool(payload.get("is_read", False))
-    read_scope = normalize_comment_read_scope(payload.get("scope"))
-    set_comment_read_state(
-        session.get("username", ""),
-        vehicle_id,
-        note_id,
-        is_read,
-        scope=read_scope,
-    )
-    return jsonify({"ok": True})
+    notes = get_atlas_vehicle_notes(vehicle_id)
+    return jsonify({"notes": notes})
 
 
 @app.route("/vehicle_note_body/<int:note_id>", methods=["GET"])
