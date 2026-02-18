@@ -226,6 +226,9 @@
       .note-row-btn:hover {
         background: #e9ecef;
       }
+            .vehicle-note-subject-unread {
+        font-weight: 700;
+      }
       
       .vehicle-details-table thead th {
         position: sticky;
@@ -943,6 +946,12 @@ function renderSearchResults(rows) {
         }
       }
 
+      function setNoteSubjectReadState(noteId, isRead) {
+        const subjectCell = vehicleNotesList.querySelector(`[data-note-subject-id="${String(noteId)}"]`);
+        if (!subjectCell) return;
+        subjectCell.classList.toggle('vehicle-note-subject-unread', !Boolean(isRead));
+      }
+
       async function loadVehicleNotes(vehicleId) {
         vehicleNotesRequestController?.abort();
         vehicleNotesRequestController = new AbortController();
@@ -989,7 +998,9 @@ function renderSearchResults(rows) {
             tr.appendChild(idTd);
 
             const subjectTd = document.createElement('td');
+            subjectTd.dataset.noteSubjectId = String(note.Id);
             subjectTd.textContent = formatNoteCellValue(note.Subject);
+            subjectTd.classList.toggle('vehicle-note-subject-unread', !Boolean(note.IsRead));
             tr.appendChild(subjectTd);
 
             const dateCreatedTd = document.createElement('td');
@@ -1028,6 +1039,7 @@ function renderSearchResults(rows) {
             noteReadToggle.disabled = false;
           }
           await saveNoteReadState(vehicleId, noteId, true);
+          setNoteSubjectReadState(noteId, true);
           updateHasCommentsButtonStateByVehicle(vehicleId, false);
           await refreshHasCommentsButtonStates();
         } catch (err) {
@@ -1201,6 +1213,7 @@ function renderSearchResults(rows) {
         noteReadToggle.addEventListener('change', async () => {
           if (!selectedVehicleId || !selectedNoteId) return;
           await saveNoteReadState(selectedVehicleId, selectedNoteId, noteReadToggle.checked);
+          setNoteSubjectReadState(selectedNoteId, noteReadToggle.checked);
           await refreshHasCommentsButtonStates();
         });
       }
