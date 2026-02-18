@@ -27,6 +27,7 @@ ADMIN_INITIAL_PASSWORD = os.getenv("ADMIN_INITIAL_PASSWORD")
 USER_STORE_LOCK = threading.RLock()
 COMMENT_READ_STATE_PATH = Path(os.getenv("COMMENT_READ_STATE_PATH", "comment_read_state.json"))
 COMMENT_READ_STATE_LOCK = threading.RLock()
+GLOBAL_COMMENT_READ_SCOPE = "__global__"
 
 ATLAS_DB_HOST = os.environ["ATLAS_DB_HOST"]
 ATLAS_DB_PORT = int(os.getenv("ATLAS_DB_PORT", "1433"))
@@ -100,31 +101,48 @@ def load_comment_read_state() -> dict:
             return {}
 
 
-def set_comment_read_state(username: str, vehicle_id: int, note_id: int, is_read: bool) -> None:
-    if not username:
+def normalize_comment_read_scope(scope: Optional[str]) -> str:
+    return "global" if (scope or "").strip().lower() == "global" else "user"
+
+
+def _comment_read_scope_key(username: str, scope: str) -> str:
+    resolved_scope = normalize_comment_read_scope(scope)
+    if resolved_scope == "global":
+        return GLOBAL_COMMENT_READ_SCOPE
+    return _normalize_username(username)
+
+
+def set_comment_read_state(
+    username: str, vehicle_id: int, note_id: int, is_read: bool, scope: str = "user"
+) -> None:
+    state_key = _comment_read_scope_key(username, scope)
+    if not state_key:
         return
-    normalized_user = _normalize_username(username)
+        
     with COMMENT_READ_STATE_LOCK:
         current_state = load_comment_read_state()
-        user_state = current_state.setdefault(normalized_user, {})
+        user_state = current_state.setdefault(state_key, {})
         vehicle_state = user_state.setdefault(str(vehicle_id), {})
         vehicle_state[str(note_id)] = bool(is_read)
         _save_comment_read_state(current_state)
 
 
-def _is_note_marked_read_in_state(state: dict, username: str, vehicle_id: int, note_id: int) -> bool:
-    if not username:
+def _is_note_marked_read_in_state(
+    state: dict, username: str, vehicle_id: int, note_id: int, scope: str = "user"
+) -> bool:
+    state_key = _comment_read_scope_key(username, scope)
+    if not state_key:
         return False
-    normalized_user = _normalize_username(username)
+        
     return bool(
-        state.get(normalized_user, {})
+        state.get(state_key, {})
         .get(str(vehicle_id), {})
         .get(str(note_id), False)
     )
 
-def is_note_marked_read(username: str, vehicle_id: int, note_id: int) -> bool:
+def is_note_marked_read(username: str, vehicle_id: int, note_id: int, scope: str = "user") -> bool:
     state = load_comment_read_state()
-    return _is_note_marked_read_in_state(state, username, vehicle_id, note_id)
+    return _is_note_marked_read_in_state(state, username, vehicle_id, note_id, scope=scope)
 
 
 def load_users() -> dict:
@@ -761,7 +779,7 @@ def build_vehicle_stats_context(
     }
 
 
-def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
+def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None, scope: str = "user"):
     last_error = None
     for database_name in _get_atlas_db_name_candidates():
         try:
@@ -792,12 +810,12 @@ def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
             )
             rows = cur.fetchall()
             notes = []
-            comment_read_state = load_comment_read_state() if username else {}
+            comment_read_state = load_comment_read_state() if (_comment_read_scope_key(username or "", scope)) else {}
             for row in rows:
                 date_created = row[3]
                 note_id = row[0]
                 is_read = _is_note_marked_read_in_state(
-                    comment_read_state, username or "", vehicle_id, note_id
+                    comment_read_state, username or "", vehicle_id, note_id, scope=scope
                 )
                 notes.append(
                     {
@@ -828,7 +846,7 @@ def get_atlas_vehicle_notes(vehicle_id: int, username: Optional[str] = None):
 
 
 
-def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Optional[str]) -> dict:
+def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Optional[str], scope: str = "user") -> dict:
     username = username or ""
     deduplicated_vehicle_ids = list(dict.fromkeys(vehicle_ids))
     statuses = {
@@ -843,7 +861,7 @@ def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Option
     if not deduplicated_vehicle_ids:
         return statuses
 
-    comment_read_state = load_comment_read_state() if username else {}
+    comment_read_state = load_comment_read_state() if (_comment_read_scope_key(username or "", scope)) else {}
     max_chunk_size = 500
     last_error = None
 
@@ -886,7 +904,7 @@ def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Option
                 has_comments = bool(note_ids)
                 has_unread = any(
                     not _is_note_marked_read_in_state(
-                        comment_read_state, username, vehicle_id, note_id
+                        comment_read_state, username, vehicle_id, note_id, scope=scope
                     )
                     for note_id in note_ids
                 )
@@ -901,7 +919,7 @@ def get_vehicle_comment_status_for_user(vehicle_ids: List[int], username: Option
             last_error = exc
 
     for vehicle_id in deduplicated_vehicle_ids:
-        notes = get_atlas_vehicle_notes(vehicle_id, username=username)
+        notes = get_atlas_vehicle_notes(vehicle_id, username=username, scope=scope)
         has_comments = bool(notes)
         has_unread = any(not note.get("IsRead", False) for note in notes)
         statuses[str(vehicle_id)] = {
@@ -1151,7 +1169,12 @@ def vehicle_stats_search():
 
 @app.route("/vehicle_notes/<int:vehicle_id>", methods=["GET"])
 def vehicle_notes(vehicle_id: int):
-    notes = get_atlas_vehicle_notes(vehicle_id, username=session.get("username"))
+    read_scope = normalize_comment_read_scope(request.args.get("scope"))
+    notes = get_atlas_vehicle_notes(
+        vehicle_id,
+        username=session.get("username"),
+        scope=read_scope,
+    )
     has_unread = any(not note.get("IsRead", False) for note in notes)
     return jsonify(
         {
@@ -1164,6 +1187,7 @@ def vehicle_notes(vehicle_id: int):
 
 @app.route("/vehicle_comment_status", methods=["GET"])
 def vehicle_comment_status():
+    read_scope = normalize_comment_read_scope(request.args.get("scope"))
     raw_vehicle_ids = request.args.getlist("vehicle_id")
     vehicle_ids = []
     for raw_id in raw_vehicle_ids:
@@ -1171,7 +1195,7 @@ def vehicle_comment_status():
             vehicle_ids.append(int(raw_id))
         except (TypeError, ValueError):
             continue
-    statuses = get_vehicle_comment_status_for_user(vehicle_ids, session.get("username"))
+    statuses = get_vehicle_comment_status_for_user(vehicle_ids, session.get("username"), scope=read_scope)
     return jsonify({"statuses": statuses})
 
 
@@ -1185,7 +1209,14 @@ def vehicle_note_read_state():
         return jsonify({"ok": False, "error": "vehicle_id and note_id are required integers."}), 400
 
     is_read = bool(payload.get("is_read", False))
-    set_comment_read_state(session.get("username", ""), vehicle_id, note_id, is_read)
+    set_comment_read_state(session.get("username", ""), vehicle_id, note_id, is_read)    read_scope = normalize_comment_read_scope(payload.get("scope"))
+    set_comment_read_state(
+        session.get("username", ""),
+        vehicle_id,
+        note_id,
+        is_read,
+        scope=read_scope,
+    ) 
     return jsonify({"ok": True})
 
 
